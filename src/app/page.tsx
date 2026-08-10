@@ -251,6 +251,10 @@ export default function Home() {
   const progressActive = isSubmitting || isSimulatingSample;
 
   function scrollToStage(stage: AppStage, options?: { force?: boolean }) {
+    // Keep the left rail in sync immediately (IntersectionObserver can lag under
+    // scroll-snap + nested main scroller).
+    setActiveStage(stage);
+
     const el = ({
       landing: landingRef,
       enter: enterRef,
@@ -337,17 +341,38 @@ export default function Home() {
 
   useEffect(() => {
     const sectionRefs = [landingRef, enterRef, analysisRef, resultsRef];
+    const stageRank: Record<AppStage, number> = {
+      landing: 0,
+      enter: 1,
+      analysis: 2,
+      results: 3,
+    };
+    // Scroll happens on `main`, not the window — root must be the scroller.
+    const root =
+      document.querySelector<HTMLElement>("[data-app-scroll]") ?? null;
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          .filter((entry) => entry.isIntersecting && entry.intersectionRatio > 0)
+          .sort((a, b) => {
+            if (b.intersectionRatio !== a.intersectionRatio) {
+              return b.intersectionRatio - a.intersectionRatio;
+            }
+            const aStage = a.target.getAttribute("data-stage") as AppStage | null;
+            const bStage = b.target.getAttribute("data-stage") as AppStage | null;
+            return (stageRank[bStage ?? "landing"] ?? 0) - (stageRank[aStage ?? "landing"] ?? 0);
+          })[0];
         const stage = visible?.target.getAttribute(
           "data-stage",
         ) as AppStage | null;
         if (stage) setActiveStage(stage);
       },
-      { threshold: [0.35, 0.55, 0.75] },
+      {
+        root,
+        // Lower thresholds so tall result sections still register when snapped in view.
+        threshold: [0.08, 0.15, 0.25, 0.4, 0.55, 0.75],
+        rootMargin: "0px 0px -12% 0px",
+      },
     );
     for (const ref of sectionRefs) {
       if (ref.current) observer.observe(ref.current);
@@ -539,12 +564,18 @@ export default function Home() {
       };
 
       if (response.status === 429) {
+        const lifetime =
+          payload.error?.toLowerCase().includes("lifetime") ?? false;
         setRateLimitModal({
-          title: "Daily demo limit reached",
+          title: lifetime
+            ? "Demo lifetime limit reached"
+            : "Daily demo limit reached",
           message:
             payload.error ??
-            "You have used today’s free analyses. Try again after the reset window.",
-          resetAt: payload.rateLimit?.resetAt,
+            (lifetime
+              ? "You have used all free analyses for this project."
+              : "You have used today’s free analyses. Try again after the reset window."),
+          resetAt: lifetime ? undefined : payload.rateLimit?.resetAt,
           limit: payload.rateLimit?.limit,
         });
         resetAnalysisUi();

@@ -4,7 +4,10 @@ import { getDb } from "@/lib/db";
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+/** Far-future window so lifetime counters are not cleaned up as “expired”. */
+const LIFETIME_WINDOW_MS = 100 * 365.25 * DAY_IN_MS;
 const DEFAULT_DAILY_LIMIT = 2;
+const DEFAULT_LIFETIME_LIMIT = 4;
 const DEFAULT_GET_LIMIT_PER_MIN = 60;
 
 type TurnstileResponse = { success: boolean; "error-codes"?: string[] };
@@ -14,6 +17,8 @@ export type RateLimitResult = {
   limit: number;
   remaining: number;
   resetAt: number;
+  /** Which quota denied the request (when allowed is false). */
+  kind?: "daily" | "lifetime";
 };
 
 export function getClientIp(request: NextRequest) {
@@ -40,12 +45,21 @@ function getDailyLimit() {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
 }
 
+function getLifetimeLimit() {
+  const parsed = Number(process.env.INTAKE_LIFETIME_LIMIT);
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_LIFETIME_LIMIT;
+}
+
 function getPollLimitPerMinute() {
   const parsed = Number(process.env.GET_POLL_LIMIT_PER_MIN);
   return Number.isInteger(parsed) && parsed > 0
     ? parsed
     : DEFAULT_GET_LIMIT_PER_MIN;
 }
+
+type RateLimitRow = { key: string; count: number; reset_at: number };
 
 /**
  * Durable per-key rate limit stored in SQLite (survives process restarts on volume).
@@ -59,11 +73,14 @@ export function checkKeyedRateLimit(
   const db = getDb();
   const now = Date.now();
 
-  db.prepare("DELETE FROM rate_limits WHERE reset_at <= ?").run(now);
+  // Do not wipe far-future lifetime keys.
+  db.prepare(
+    "DELETE FROM rate_limits WHERE reset_at <= ? AND key NOT LIKE 'lifetime:%'",
+  ).run(now);
 
   const existing = db
     .prepare("SELECT key, count, reset_at FROM rate_limits WHERE key = ?")
-    .get(key) as { key: string; count: number; reset_at: number } | undefined;
+    .get(key) as RateLimitRow | undefined;
 
   if (!existing || existing.reset_at <= now) {
     const resetAt = now + windowMs;
@@ -96,7 +113,89 @@ export function checkKeyedRateLimit(
   };
 }
 
-/** Intake daily limit per client IP (default 2). */
+function readKeyedCount(
+  key: string,
+  now: number,
+): { count: number; resetAt: number; fresh: boolean } {
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT key, count, reset_at FROM rate_limits WHERE key = ?")
+    .get(key) as RateLimitRow | undefined;
+  if (!existing || existing.reset_at <= now) {
+    return { count: 0, resetAt: 0, fresh: true };
+  }
+  return { count: existing.count, resetAt: existing.reset_at, fresh: false };
+}
+
+function writeKeyedCount(key: string, count: number, resetAt: number) {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO rate_limits (key, count, reset_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at`,
+  ).run(key, count, resetAt);
+}
+
+/**
+ * Daily + lifetime intake quotas for one IP.
+ * Increments both only when the request is allowed (avoids burning lifetime on a daily block).
+ */
+export function checkIntakeLimits(ip: string): RateLimitResult {
+  const db = getDb();
+  const now = Date.now();
+  const dailyLimit = getDailyLimit();
+  const lifetimeLimit = getLifetimeLimit();
+  const dailyKey = `ip:${ip}`;
+  const lifetimeKey = `lifetime:${ip}`;
+
+  db.prepare(
+    "DELETE FROM rate_limits WHERE reset_at <= ? AND key NOT LIKE 'lifetime:%'",
+  ).run(now);
+
+  const daily = readKeyedCount(dailyKey, now);
+  const lifetime = readKeyedCount(lifetimeKey, now);
+
+  const dailyResetAt = daily.fresh ? now + DAY_IN_MS : daily.resetAt;
+  const lifetimeResetAt = lifetime.fresh
+    ? now + LIFETIME_WINDOW_MS
+    : lifetime.resetAt;
+
+  if (lifetime.count >= lifetimeLimit) {
+    return {
+      allowed: false,
+      limit: lifetimeLimit,
+      remaining: 0,
+      resetAt: lifetimeResetAt,
+      kind: "lifetime",
+    };
+  }
+  if (daily.count >= dailyLimit) {
+    return {
+      allowed: false,
+      limit: dailyLimit,
+      remaining: 0,
+      resetAt: dailyResetAt,
+      kind: "daily",
+    };
+  }
+
+  const nextDaily = daily.count + 1;
+  const nextLifetime = lifetime.count + 1;
+  // Single transaction so both counters move together.
+  const tx = db.transaction(() => {
+    writeKeyedCount(dailyKey, nextDaily, dailyResetAt);
+    writeKeyedCount(lifetimeKey, nextLifetime, lifetimeResetAt);
+  });
+  tx();
+
+  return {
+    allowed: true,
+    limit: dailyLimit,
+    remaining: dailyLimit - nextDaily,
+    resetAt: dailyResetAt,
+  };
+}
+
+/** Intake daily limit per client IP (default 2). Prefer checkIntakeLimits for gate. */
 export function checkRateLimit(ip: string): RateLimitResult {
   return checkKeyedRateLimit(`ip:${ip}`, getDailyLimit(), DAY_IN_MS);
 }
@@ -182,12 +281,15 @@ export async function gateIntake(options: {
     }
   }
 
-  const rateLimit = checkRateLimit(ip);
+  const rateLimit = checkIntakeLimits(ip);
   if (!rateLimit.allowed) {
     return {
       ok: false,
       status: 429,
-      error: "Daily demo limit reached.",
+      error:
+        rateLimit.kind === "lifetime"
+          ? "Demo lifetime limit reached for this project."
+          : "Daily demo limit reached.",
       rateLimit,
     };
   }
