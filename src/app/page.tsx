@@ -607,6 +607,27 @@ export default function Home() {
     requestAnimationFrame(() => scrollToStage("results"));
   }
 
+  /** Clear form + result state and return to Enter for another run. */
+  function startNewAnalysis() {
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    setDomain("");
+    setError(null);
+    setRateLimitModal(null);
+    setLiveResult(null);
+    setShowSample(false);
+    setJobId(null);
+    setIsSubmitting(false);
+    setAnalysisSeconds(0);
+    setAnalysisPercent(0);
+    setAnalysisLabel("Waiting for a domain");
+    setWorkflowUiStage("idle");
+    serverStageRef.current = "idle";
+    window.turnstile?.reset();
+    setTurnstileToken("");
+    requestAnimationFrame(() => scrollToStage("enter"));
+  }
+
   const displayResult: DisplayResult | null = liveResult
     ? liveResult
     : showSample
@@ -1036,6 +1057,13 @@ export default function Home() {
                     "Public-web estimate only — not investment or legal advice."}
                   {showSample ? " Sample data is illustrative." : null}
                 </p>
+                <button
+                  type="button"
+                  onClick={startNewAnalysis}
+                  className={solidCtaClass()}
+                >
+                  Analyze another company
+                </button>
               </div>
             ) : (
               <div className="rounded-[1.5rem] border border-white/10 bg-[#111816] p-8 text-center text-sm text-stone-400">
