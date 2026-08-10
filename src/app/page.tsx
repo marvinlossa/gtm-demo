@@ -221,6 +221,8 @@ export default function Home() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  /** Client-only sample walkthrough (no n8n / no job). */
+  const [isSimulatingSample, setIsSimulatingSample] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [liveResult, setLiveResult] = useState<DisplayResult | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
@@ -242,8 +244,11 @@ export default function Home() {
   const analysisRef = useRef<HTMLElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
+  const sampleSimAbortRef = useRef<AbortController | null>(null);
   /** Highest stage seen from server polls — heuristic must not override this. */
   const serverStageRef = useRef<WorkflowUiStage>("idle");
+
+  const progressActive = isSubmitting || isSimulatingSample;
 
   function scrollToStage(stage: AppStage, options?: { force?: boolean }) {
     const el = ({
@@ -353,15 +358,20 @@ export default function Home() {
   useEffect(() => {
     return () => {
       pollAbortRef.current?.abort();
+      sampleSimAbortRef.current?.abort();
     };
   }, []);
 
+  /** Elapsed seconds + live-run progress theater (not used for sample sim). */
   useEffect(() => {
-    if (!isSubmitting) return;
+    if (!progressActive) return;
     const startedAt = Date.now();
     const timer = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
       setAnalysisSeconds(Math.floor(elapsed / 1000));
+
+      // Sample walkthrough owns percent/stages itself.
+      if (isSimulatingSample) return;
 
       if (elapsed < 45_000) {
         setAnalysisPercent((p) =>
@@ -416,7 +426,7 @@ export default function Home() {
       }
     }, 250);
     return () => window.clearInterval(timer);
-  }, [isSubmitting]);
+  }, [progressActive, isSimulatingSample]);
 
   function selectedProfileLabel() {
     return (
@@ -481,6 +491,11 @@ export default function Home() {
       setError("Enter a company domain or URL.");
       return;
     }
+
+    // Cancel sample walkthrough if a real run starts.
+    sampleSimAbortRef.current?.abort();
+    sampleSimAbortRef.current = null;
+    setIsSimulatingSample(false);
 
     pollAbortRef.current?.abort();
     const abort = new AbortController();
@@ -594,29 +609,130 @@ export default function Home() {
     }
   }
 
-  function viewSample() {
+  /**
+   * Simulate the live-analysis path for the sample report (no workflow trigger).
+   * Walks progress + workflow nodes, then opens the illustrative result.
+   */
+  async function viewSample() {
+    if (isSubmitting || isSimulatingSample) return;
+
     pollAbortRef.current?.abort();
+    sampleSimAbortRef.current?.abort();
+    const abort = new AbortController();
+    sampleSimAbortRef.current = abort;
+
     setError(null);
     setLiveResult(null);
-    setShowSample(true);
+    setShowSample(false);
     setIsSubmitting(false);
-    serverStageRef.current = "done";
-    setWorkflowUiStage("done");
-    setAnalysisPercent(100);
-    setAnalysisLabel("Analysis complete");
-    setAnalysisDetail("Your prospect report is ready.");
-    scrollToResultsAfterComplete();
+    setIsSimulatingSample(true);
+    setShowScoreHow(false);
+    setAnalysisSeconds(0);
+
+    const steps: Array<{
+      stage: WorkflowUiStage;
+      label: string;
+      detail: string;
+      percent: number;
+      holdMs: number;
+    }> = [
+      {
+        stage: "research",
+        label: "Researching the company",
+        detail: "Looking for relevant business, growth and GTM signals.",
+        percent: 18,
+        holdMs: 1100,
+      },
+      {
+        stage: "research",
+        label: "Checking buying signals",
+        detail: "Looking for reasons why outreach may be relevant now.",
+        percent: 42,
+        holdMs: 1100,
+      },
+      {
+        stage: "strategy",
+        label: "Building the sales strategy",
+        detail: "Identifying the best contact role and outreach angle.",
+        percent: 68,
+        holdMs: 1200,
+      },
+      {
+        stage: "scoring",
+        label: "Evaluating prospect fit",
+        detail: "Comparing the evidence against the selected ICP.",
+        percent: 90,
+        holdMs: 900,
+      },
+      {
+        stage: "done",
+        label: "Analysis complete",
+        detail: "Your prospect report is ready.",
+        percent: 100,
+        holdMs: 450,
+      },
+    ];
+
+    // Start at analysis so the walkthrough is visible.
+    serverStageRef.current = "research";
+    setWorkflowUiStage("research");
+    setAnalysisPercent(8);
+    setAnalysisLabel(steps[0].label);
+    setAnalysisDetail(steps[0].detail);
+    requestAnimationFrame(() => scrollToStage("analysis", { force: true }));
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        if (abort.signal.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+        const t = window.setTimeout(() => resolve(), ms);
+        abort.signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(t);
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true },
+        );
+      });
+
+    try {
+      for (const step of steps) {
+        if (abort.signal.aborted) return;
+        serverStageRef.current = step.stage;
+        setWorkflowUiStage(step.stage);
+        setAnalysisLabel(step.label);
+        setAnalysisDetail(step.detail);
+        setAnalysisPercent((p) => Math.max(p, step.percent));
+        await sleep(step.holdMs);
+      }
+      if (abort.signal.aborted) return;
+
+      setShowSample(true);
+      setIsSimulatingSample(false);
+      sampleSimAbortRef.current = null;
+      scrollToResultsAfterComplete();
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      setIsSimulatingSample(false);
+      sampleSimAbortRef.current = null;
+    }
   }
 
   function startNewAnalysis() {
     pollAbortRef.current?.abort();
     pollAbortRef.current = null;
+    sampleSimAbortRef.current?.abort();
+    sampleSimAbortRef.current = null;
     setDomain("");
     setError(null);
     setRateLimitModal(null);
     setLiveResult(null);
     setShowSample(false);
     setIsSubmitting(false);
+    setIsSimulatingSample(false);
     setAnalysisSeconds(0);
     setAnalysisPercent(0);
     setAnalysisLabel("Waiting for a company");
@@ -643,7 +759,9 @@ export default function Home() {
   }));
 
   const analysisHeading =
-    isSubmitting || workflowUiStage === "done" || workflowUiStage === "failed"
+    progressActive ||
+    workflowUiStage === "done" ||
+    workflowUiStage === "failed"
       ? "Researching the company and building your recommendation."
       : "See how the analysis works.";
 
@@ -761,10 +879,13 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  onClick={viewSample}
+                  disabled={progressActive}
+                  onClick={() => void viewSample()}
                   className={secondaryButtonClass()}
                 >
-                  View sample report
+                  {isSimulatingSample
+                    ? "Running sample…"
+                    : "View sample report"}
                 </button>
               </div>
             </div>
@@ -887,11 +1008,15 @@ export default function Home() {
               ) : null}
               <button
                 type="button"
-                disabled={isSubmitting || !domain.trim()}
+                disabled={progressActive || !domain.trim()}
                 onClick={() => void startAnalysis()}
-                className={`mt-5 ${solidCtaClass(isSubmitting || !domain.trim())}`}
+                className={`mt-5 ${solidCtaClass(progressActive || !domain.trim())}`}
               >
-                {isSubmitting ? "Starting analysis…" : "Analyze prospect"}
+                {isSubmitting
+                  ? "Starting analysis…"
+                  : isSimulatingSample
+                    ? "Sample running…"
+                    : "Analyze prospect"}
               </button>
               {error ? (
                 <p className="mt-4 rounded-2xl border border-red-300/30 bg-red-950/40 p-4 text-sm text-red-100">
@@ -925,7 +1050,7 @@ export default function Home() {
                 <span className="text-sm font-medium text-stone-200">
                   {analysisLabel}
                 </span>
-                {isSubmitting ? (
+                {progressActive ? (
                   <span className="font-mono text-sm text-amber-200">
                     {analysisSeconds}s
                   </span>
@@ -936,7 +1061,7 @@ export default function Home() {
               </p>
               <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className={`h-full rounded-full bg-amber-300 transition-all duration-500 ${isSubmitting ? "animate-pulse" : ""}`}
+                  className={`h-full rounded-full bg-amber-300 transition-all duration-500 ${progressActive ? "animate-pulse" : ""}`}
                   style={{ width: `${analysisPercent}%` }}
                 />
               </div>
@@ -949,27 +1074,29 @@ export default function Home() {
                 <Pill tone="stone">OpenRouter</Pill>
               </div>
               <p className="mt-4 text-sm leading-6 text-stone-400">
-                {isSubmitting
-                  ? "Analysis in progress…"
-                  : displayResult
-                    ? showSample
-                      ? "Sample report ready — illustrative data only."
-                      : (
-                          <>
-                            Analysis complete —{" "}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                scrollToStage("results", { force: true })
-                              }
-                              className="font-medium text-amber-100 underline-offset-2 hover:underline"
-                            >
-                              view prospect report
-                            </button>
-                            .
-                          </>
-                        )
-                    : "Enter a company above to begin."}
+                {isSimulatingSample
+                  ? "Sample walkthrough — no live research (illustrative only)."
+                  : isSubmitting
+                    ? "Analysis in progress…"
+                    : displayResult
+                      ? showSample
+                        ? "Sample report ready — illustrative data only."
+                        : (
+                            <>
+                              Analysis complete —{" "}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  scrollToStage("results", { force: true })
+                                }
+                                className="font-medium text-amber-100 underline-offset-2 hover:underline"
+                              >
+                                view prospect report
+                              </button>
+                              .
+                            </>
+                          )
+                      : "Enter a company above to begin."}
               </p>
             </div>
           </div>
@@ -1090,10 +1217,13 @@ export default function Home() {
                 </p>
                 <button
                   type="button"
-                  onClick={viewSample}
+                  disabled={progressActive}
+                  onClick={() => void viewSample()}
                   className={`mt-4 ${secondaryButtonClass()}`}
                 >
-                  View sample report
+                  {isSimulatingSample
+                    ? "Running sample…"
+                    : "View sample report"}
                 </button>
               </div>
             )}
@@ -1284,10 +1414,13 @@ export default function Home() {
                 </p>
                 <button
                   type="button"
-                  onClick={viewSample}
+                  disabled={progressActive}
+                  onClick={() => void viewSample()}
                   className={`mt-5 ${secondaryButtonClass()}`}
                 >
-                  View sample report
+                  {isSimulatingSample
+                    ? "Running sample…"
+                    : "View sample report"}
                 </button>
               </div>
             )}
