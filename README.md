@@ -2,7 +2,9 @@
 
 Portfolio GTM demo: enter a company domain and ICP profile, run an n8n-orchestrated analysis, and display a transparent fit score plus sales strategy.
 
-**Planned live demo:** [gtm-demo.marvinlossa.com](https://gtm-demo.marvinlossa.com)
+**Live demo:** [gtm-demo.marvinlossa.com](https://gtm-demo.marvinlossa.com) (also [Railway URL](https://gtm-demo-production.up.railway.app))  
+**GitHub:** [marvinlossa/gtm-demo](https://github.com/marvinlossa/gtm-demo)  
+**Railway project:** `gtm-tools` (services: `gtm-demo`, `n8n`)
 
 ## Product flow
 

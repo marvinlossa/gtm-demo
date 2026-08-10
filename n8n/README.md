@@ -162,11 +162,12 @@ See design doc. Summary:
 
 ## Railway notes
 
-1. Service `n8n` from image `n8nio/n8n:1.103.0` + volume on `/home/node/.n8n`
-2. Private networking for app → webhook if available; public URL only for editor
-3. Set the same secrets as above; never put Perplexity/OpenRouter keys on the app service
-4. App `N8N_WEBHOOK_URL` = internal `http://n8n.railway.internal:.../webhook/gtm-fit-analysis` or public production webhook URL
-5. App `NEXT_PUBLIC_APP_URL` / callback base = public `https://gtm-demo.marvinlossa.com`
+1. Service `n8n` from image `n8nio/n8n` (or pin `:1.103.0` / `:latest`) with **start command** `n8n` (not bare `start` — Railway may drop the image entrypoint).
+2. **Volume caution:** mounting a Railway volume over `/home/node/.n8n` often causes `EACCES` (volume root-owned, n8n runs as `node`). Prefer no volume first, or mount at `/data` with a root entrypoint that `chown`s before `exec n8n`, and set `N8N_USER_FOLDER=/data`.
+3. Private networking for app → webhook if available; public URL for the editor.
+4. Set the same secrets as above; never put Perplexity/OpenRouter keys on the app service.
+5. App `N8N_WEBHOOK_URL` = internal `http://n8n.railway.internal:.../webhook/gtm-fit-analysis` or public production webhook URL when `MOCK_N8N=0`.
+6. App public URL = `https://gtm-demo.marvinlossa.com` (plus Railway default domain).
 
 ## Troubleshooting
 
