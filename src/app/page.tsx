@@ -14,7 +14,9 @@ import {
   confidenceLabel,
   evidenceStrength,
   humanSourceLabel,
+  prioritySupportingCopy,
   SAMPLE_RESULT,
+  weightedCriterionScore,
   type DisplayResult,
   type JobStrategyPayload,
 } from "@/lib/report-display";
@@ -92,6 +94,7 @@ type JobPollResponse = {
       attributeId: string;
       label: string;
       attributeScore: number;
+      weight?: number;
       present: string;
       confidence: number;
       evidence: Array<{ snippet: string; sourceUrl?: string }>;
@@ -112,6 +115,7 @@ function mapJobToDisplay(
       id: a.attributeId,
       label: a.label,
       score: a.attributeScore,
+      weight: a.weight,
       present: a.present,
       confidence: a.confidence,
       evidence: first?.snippet ?? "No evidence snippet.",
@@ -1213,7 +1217,7 @@ export default function Home() {
                         {displayResult.priority}
                       </p>
                       <p className="mt-1 text-sm text-stone-400">
-                        Time worth spending
+                        {prioritySupportingCopy(displayResult.priority)}
                       </p>
                     </div>
                   </div>
@@ -1230,12 +1234,26 @@ export default function Home() {
                       {displayResult.recommendationBlurb}
                     </p>
                   </div>
+                  {displayResult.topReasons.length > 0 ? (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-stone-500">
+                        Top reasons
+                      </p>
+                      <ul className="mt-3 grid gap-1.5 text-sm leading-6 text-stone-300">
+                        {displayResult.topReasons.map((reason) => (
+                          <li key={reason} className="flex gap-2">
+                            <span className="text-amber-200/90">·</span>
+                            <span>{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
                 {showSample ? (
                   <p className="text-sm leading-6 text-stone-500">
-                    Sample based on a real analysis of ramp.com (cached for the
-                    walkthrough — no live re-run). Analyze another domain for a
-                    fresh research job.
+                    Sample report generated from a cached public-web analysis of
+                    ramp.com. Analyze another company for a fresh report.
                   </p>
                 ) : null}
               </div>
@@ -1270,55 +1288,67 @@ export default function Home() {
                     Why this company fits
                   </p>
                   <h3 className="mt-2 text-xl font-semibold">
-                    ICP criteria vs public evidence
+                    How the company matches your target profile
                   </h3>
                   <div className="mt-4 grid gap-3">
-                    {displayResult.attributes.map((attr) => (
-                      <div
-                        key={attr.id}
-                        className="rounded-2xl border border-white/10 bg-black/20 p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-stone-100">
-                              {attr.label}
-                            </p>
-                            <p className="mt-1 text-xs text-stone-500">
-                              {evidenceStrength(attr.present, attr.confidence)}
+                    {displayResult.attributes.map((attr) => {
+                      const weighted = weightedCriterionScore(
+                        attr.score,
+                        attr.weight ?? 0.1,
+                      );
+                      return (
+                        <div
+                          key={attr.id}
+                          className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-stone-100">
+                                {attr.label}
+                              </p>
+                              <p className="mt-1 text-xs text-stone-500">
+                                {evidenceStrength(
+                                  attr.present,
+                                  attr.confidence,
+                                )}
+                              </p>
+                            </div>
+                            <p className="shrink-0 font-mono text-sm font-semibold text-amber-200">
+                              {weighted.points}
+                              <span className="font-normal text-stone-500">
+                                {" "}
+                                / {weighted.maxPoints}
+                              </span>
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="font-mono text-sm text-amber-200">
-                              {attr.score}
-                              <span className="text-stone-500">/100</span>
-                            </p>
-                            <span className="mt-1 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-stone-300">
+                          <p className="mt-3 text-sm leading-6 text-stone-300">
+                            {attr.evidence}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="inline-block rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-stone-500">
                               {confidenceLabel(attr.confidence)}
                             </span>
+                            {attr.sourceLabel || attr.sourceUrl ? (
+                              <span className="text-xs text-stone-500">
+                                Source:{" "}
+                                {attr.sourceUrl ? (
+                                  <a
+                                    href={attr.sourceUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-cyan-200/90 underline-offset-2 hover:underline"
+                                  >
+                                    {attr.sourceLabel ?? "Open source"}
+                                  </a>
+                                ) : (
+                                  (attr.sourceLabel ?? "Public web")
+                                )}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-stone-300">
-                          {attr.evidence}
-                        </p>
-                        {attr.sourceLabel || attr.sourceUrl ? (
-                          <p className="mt-2 text-xs text-stone-500">
-                            Source:{" "}
-                            {attr.sourceUrl ? (
-                              <a
-                                href={attr.sourceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-cyan-200/90 underline-offset-2 hover:underline"
-                              >
-                                {attr.sourceLabel ?? "Open source"}
-                              </a>
-                            ) : (
-                              (attr.sourceLabel ?? "Public web")
-                            )}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1357,7 +1387,10 @@ export default function Home() {
                   <p className="mt-3 text-lg font-semibold text-stone-50">
                     {displayResult.whoToApproach}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-stone-400">
+                  <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-stone-500">
+                    Why this role
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-stone-400">
                     {displayResult.whoToApproachWhy}
                   </p>
                   {displayResult.alternativeContact ? (
@@ -1370,13 +1403,10 @@ export default function Home() {
                   ) : null}
                 </div>
 
-                {/* Likely challenge */}
+                {/* Likely business challenge */}
                 <div className={panelInnerClass()}>
                   <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-500">
-                    Likely challenge
-                  </p>
-                  <p className="mt-1 text-xs text-stone-500">
-                    Working hypothesis — not confirmed internal fact
+                    Likely business challenge
                   </p>
                   <p className="mt-3 text-sm leading-7 text-stone-200">
                     {displayResult.likelyChallenge}
@@ -1392,6 +1422,26 @@ export default function Home() {
                     {displayResult.salesAngle}
                   </p>
                 </div>
+
+                {/* Potential objection (optional) */}
+                {displayResult.potentialObjection ? (
+                  <div className={panelInnerClass()}>
+                    <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-500">
+                      Potential objection
+                    </p>
+                    <p className="mt-3 text-sm leading-7 text-stone-200">
+                      {displayResult.potentialObjection.text}
+                    </p>
+                    {displayResult.potentialObjection.howToAddress ? (
+                      <p className="mt-3 text-sm leading-6 text-stone-400">
+                        <span className="font-medium text-stone-300">
+                          How to address it:{" "}
+                        </span>
+                        {displayResult.potentialObjection.howToAddress}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {/* Conversation starter */}
                 <div className={panelInnerClass()}>
@@ -1419,7 +1469,9 @@ export default function Home() {
                       Each profile defines weighted fit criteria. Company
                       research is evaluated against those criteria and the final
                       score is calculated consistently from the individual
-                      results.
+                      results. Criterion cards show each factor&apos;s
+                      contribution (e.g. 17/20) toward the overall 0–100 fit
+                      score.
                     </p>
                   ) : null}
                 </div>
