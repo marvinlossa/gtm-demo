@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GTM Fit Analyzer | ICP Fit Demo",
+  title: "GTM Fit Analyzer | Prospect research & qualification",
   description:
-    "Score how well a company matches a GTM profile, with transparent evidence and a tailored sales strategy — orchestrated by n8n.",
+    "Enter a company domain and Ideal Customer Profile. Research public signals, score prospect fit, and get a practical sales strategy.",
 };
 
 export default function RootLayout({

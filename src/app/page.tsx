@@ -10,6 +10,15 @@ import {
 } from "@/components/UiPrimitives";
 import { WorkflowPanel } from "@/components/WorkflowPanel";
 import {
+  buildDisplayResult,
+  confidenceLabel,
+  evidenceStrength,
+  humanSourceLabel,
+  SAMPLE_RESULT,
+  type DisplayResult,
+  type JobStrategyPayload,
+} from "@/lib/report-display";
+import {
   type AppStage,
   appStages,
   panelInnerClass,
@@ -69,96 +78,6 @@ type RateLimitModal = {
   limit?: number;
 };
 
-type DisplayAttribute = {
-  id: string;
-  label: string;
-  score: number;
-  present: string;
-  confidence: number;
-  evidence: string;
-};
-
-type DisplayResult = {
-  domain: string;
-  profileLabel: string;
-  overallScore: number;
-  fitBand: string;
-  attributes: DisplayAttribute[];
-  strategy: {
-    summary: string;
-    talkTracks: string[];
-    nextSteps: string[];
-  };
-  limitations?: string[];
-  mock?: boolean;
-};
-
-/**
- * Client-only sample so recruiters can see layout without burning quota.
- * Always framed seller → prospect (reader analyzes a potential client).
- */
-const SAMPLE_RESULT: DisplayResult = {
-  domain: "northwind-analytics.com",
-  profileLabel: "Sales Expansion",
-  overallScore: 74,
-  fitBand: "Moderate fit",
-  attributes: [
-    {
-      id: "growing-sales-team",
-      label: "Growing sales team",
-      score: 82,
-      present: "true",
-      confidence: 0.8,
-      evidence:
-        "Careers lists AE + SDR openings in US and EMEA; blog notes GTM headcount growth after the raise (illustrative sample).",
-    },
-    {
-      id: "recent-funding",
-      label: "Recent funding",
-      score: 88,
-      present: "true",
-      confidence: 0.85,
-      evidence:
-        "Press room cites a Series B led by a growth fund to scale go-to-market (illustrative sample).",
-    },
-    {
-      id: "b2b-offering",
-      label: "B2B offering",
-      score: 91,
-      present: "true",
-      confidence: 0.9,
-      evidence:
-        "Team/enterprise pricing and case studies aimed at mid-market analytics buyers (illustrative sample).",
-    },
-    {
-      id: "clear-sales-org",
-      label: "Clear sales organization",
-      score: 68,
-      present: "true",
-      confidence: 0.7,
-      evidence:
-        "Leadership page lists a VP of Sales; enterprise page describes AE-led evaluation (illustrative sample).",
-    },
-  ],
-  strategy: {
-    summary:
-      "Outbound plan for selling into Northwind Analytics (prospect), not running their company. Moderate Sales Expansion fit: public hiring + funding suggest GTM capacity pressure. First thread: prospect RevOps or VP Sales. Open on AE ramp / handoff friction; propose a 30-day pilot on one pod with a single pipeline or ramp metric.",
-    talkTracks: [
-      "Cold email / call open: “Saw Northwind posting AEs after the Series B — teams in that phase often hit marketing→sales handoff friction. Worth a 15-minute compare against what peers do on ramp?”",
-      "Discovery bridge: “If multi-threaded deals are common for your analytics buyers, champions usually need a one-page ROI brief. Happy to leave one tailored to Northwind’s motion.”",
-    ],
-    nextSteps: [
-      "Map public AE/SDR openings and 2–3 prospect stakeholders (VP Sales, RevOps, CRO)",
-      "Draft a 3-touch outbound sequence to those titles — seller voice, not an internal memo to Northwind",
-      "Offer a 30-day pilot scoped to one Northwind sales pod with one success metric",
-    ],
-  },
-  limitations: [
-    "Illustrative sample only — not live research.",
-    "Public-web estimate style; not investment or legal advice.",
-  ],
-};
-
 type JobPollResponse = {
   id: string;
   domain: string;
@@ -175,13 +94,9 @@ type JobPollResponse = {
       attributeScore: number;
       present: string;
       confidence: number;
-      evidence: Array<{ snippet: string }>;
+      evidence: Array<{ snippet: string; sourceUrl?: string }>;
     }>;
-    strategy: {
-      summary: string;
-      talkTracks?: Array<{ title?: string; script?: string } | string>;
-      nextSteps?: string[];
-    };
+    strategy: JobStrategyPayload;
     limitations?: string[];
   } | null;
 };
@@ -191,32 +106,29 @@ function mapJobToDisplay(
   profileLabel: string,
 ): DisplayResult | null {
   if (!job.result) return null;
-  const talkTracks = (job.result.strategy.talkTracks ?? []).map((t) => {
-    if (typeof t === "string") return t;
-    if (t.title && t.script) return `${t.title}: ${t.script}`;
-    return t.script ?? t.title ?? "";
-  }).filter(Boolean);
-
-  return {
-    domain: job.domain,
-    profileLabel,
-    overallScore: job.result.overallScore,
-    fitBand: job.result.fitBand,
-    attributes: job.result.attributes.map((a) => ({
+  const attributes = job.result.attributes.map((a) => {
+    const first = a.evidence?.[0];
+    return {
       id: a.attributeId,
       label: a.label,
       score: a.attributeScore,
       present: a.present,
       confidence: a.confidence,
-      evidence: a.evidence?.[0]?.snippet ?? "No evidence snippet.",
-    })),
-    strategy: {
-      summary: job.result.strategy.summary,
-      talkTracks,
-      nextSteps: job.result.strategy.nextSteps ?? [],
-    },
+      evidence: first?.snippet ?? "No evidence snippet.",
+      sourceUrl: first?.sourceUrl,
+      sourceLabel: humanSourceLabel(first?.sourceUrl),
+    };
+  });
+
+  return buildDisplayResult({
+    domain: job.domain,
+    profileLabel,
+    overallScore: job.result.overallScore,
+    fitBand: job.result.fitBand,
+    attributes,
+    strategy: job.result.strategy ?? {},
     limitations: job.result.limitations,
-  };
+  });
 }
 
 type PollHandlers = {
@@ -252,13 +164,12 @@ async function pollJobUntilDone(
     }
     const job = (await response.json()) as JobPollResponse;
 
-    // Server stage is authoritative; parent applies monotonic advance.
     if (job.stage === "strategy") {
-      handlers.onStage("strategy", "Drafting sales strategy", 70);
+      handlers.onStage("strategy", "Building the sales strategy", 70);
     } else if (job.stage === "research") {
-      handlers.onStage("research", "Researching company signals", 40);
+      handlers.onStage("research", "Researching the company", 40);
     } else if (job.stage === "scoring" || job.stage === "done") {
-      handlers.onStage("scoring", "Scoring attributes", 96);
+      handlers.onStage("scoring", "Evaluating prospect fit", 96);
     }
 
     if (job.status === "complete" && job.result) {
@@ -277,6 +188,20 @@ async function pollJobUntilDone(
       return;
     }
   }
+}
+
+function levelTone(level: string): "cyan" | "amber" | "stone" {
+  if (level === "High" || level === "Pursue" || level === "Strong fit") {
+    return "cyan";
+  }
+  if (
+    level === "Medium" ||
+    level === "Monitor" ||
+    level === "Moderate fit"
+  ) {
+    return "amber";
+  }
+  return "stone";
 }
 
 export default function Home() {
@@ -298,7 +223,6 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [liveResult, setLiveResult] = useState<DisplayResult | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [rateLimitModal, setRateLimitModal] = useState<RateLimitModal | null>(
     null,
@@ -307,7 +231,11 @@ export default function Home() {
     useState<WorkflowUiStage>("idle");
   const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [analysisPercent, setAnalysisPercent] = useState(0);
-  const [analysisLabel, setAnalysisLabel] = useState("Waiting for a domain");
+  const [analysisLabel, setAnalysisLabel] = useState("Waiting for a company");
+  const [analysisDetail, setAnalysisDetail] = useState(
+    "Enter a company above to begin.",
+  );
+  const [showScoreHow, setShowScoreHow] = useState(false);
 
   const landingRef = useRef<HTMLElement>(null);
   const enterRef = useRef<HTMLElement>(null);
@@ -326,8 +254,6 @@ export default function Home() {
     })[stage].current;
     if (!el) return;
 
-    // Scroll the snap container (`main`), not just the window — scrollIntoView
-    // alone often fails or gets cancelled under CSS scroll-snap.
     const scroller =
       el.closest<HTMLElement>("[data-app-scroll]") ??
       el.closest("main") ??
@@ -346,14 +272,12 @@ export default function Home() {
     };
 
     run();
-    // Second pass after layout (results content mount, fonts, snap settle)
     if (options?.force) {
       window.setTimeout(run, 80);
       window.setTimeout(run, 280);
     }
   }
 
-  /** After React commits result state, scroll to Results reliably. */
   function scrollToResultsAfterComplete() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -439,7 +363,6 @@ export default function Home() {
       const elapsed = Date.now() - startedAt;
       setAnalysisSeconds(Math.floor(elapsed / 1000));
 
-      // Progress bar only from elapsed time (monotonic fill).
       if (elapsed < 45_000) {
         setAnalysisPercent((p) =>
           Math.max(p, Math.min(55, 8 + (elapsed / 45_000) * 47)),
@@ -452,9 +375,6 @@ export default function Home() {
         setAnalysisPercent((p) => Math.max(p, 94));
       }
 
-      // Stage theater is strictly monotonic and never overrides a higher server stage.
-      // Bug we fixed: after 45s heuristic forced "strategy" while poll still returned
-      // stage=research every 2s → UI jumped research ↔ strategy.
       const server = serverStageRef.current;
       if (
         server === "done" ||
@@ -462,25 +382,36 @@ export default function Home() {
         server === "scoring" ||
         server === "strategy"
       ) {
-        // Label for long waits once strategy is already known
         if (server === "strategy" && elapsed >= 100_000) {
           setAnalysisLabel((label) =>
-            label.startsWith("Scoring") || label.startsWith("Complete")
+            label.startsWith("Evaluating") || label.startsWith("Analysis")
               ? label
-              : "Finalizing",
+              : "Building the sales strategy",
+          );
+          setAnalysisDetail(
+            "Identifying the best contact role and outreach angle.",
           );
         }
         return;
       }
 
-      if (elapsed < 45_000) {
+      if (elapsed < 30_000) {
         setWorkflowUiStage((s) => advanceWorkflowStage(s, "research"));
-        setAnalysisLabel("Researching company signals");
+        setAnalysisLabel("Researching the company");
+        setAnalysisDetail(
+          "Looking for relevant business, growth and GTM signals.",
+        );
+      } else if (elapsed < 55_000) {
+        setWorkflowUiStage((s) => advanceWorkflowStage(s, "research"));
+        setAnalysisLabel("Checking buying signals");
+        setAnalysisDetail(
+          "Looking for reasons why outreach may be relevant now.",
+        );
       } else {
-        // Optimistic advance only when server has not yet reported strategy.
         setWorkflowUiStage((s) => advanceWorkflowStage(s, "strategy"));
-        setAnalysisLabel(
-          elapsed < 100_000 ? "Drafting sales strategy" : "Finalizing",
+        setAnalysisLabel("Building the sales strategy");
+        setAnalysisDetail(
+          "Identifying the best contact role and outreach angle.",
         );
       }
     }, 250);
@@ -506,7 +437,8 @@ export default function Home() {
     setWorkflowUiStage("idle");
     serverStageRef.current = "idle";
     setAnalysisPercent(0);
-    setAnalysisLabel("Waiting for a domain");
+    setAnalysisLabel("Waiting for a company");
+    setAnalysisDetail("Enter a company above to begin.");
     window.turnstile?.reset();
     setTurnstileToken("");
   }
@@ -515,11 +447,25 @@ export default function Home() {
     const prev = serverStageRef.current;
     const next = advanceWorkflowStage(prev, stage);
     serverStageRef.current = next;
-    // Only rewrite label when we actually advance (or first set) — avoids
-    // "Researching"/"Drafting" thrash when poll re-sends an older stage.
-    if (WORKFLOW_STAGE_RANK[next] > WORKFLOW_STAGE_RANK[prev] || prev === "idle") {
+    if (
+      WORKFLOW_STAGE_RANK[next] > WORKFLOW_STAGE_RANK[prev] ||
+      prev === "idle"
+    ) {
       setWorkflowUiStage(next);
       setAnalysisLabel(label);
+      if (stage === "research") {
+        setAnalysisDetail(
+          "Looking for relevant business, growth and GTM signals.",
+        );
+      } else if (stage === "strategy") {
+        setAnalysisDetail(
+          "Identifying the best contact role and outreach angle.",
+        );
+      } else if (stage === "scoring") {
+        setAnalysisDetail(
+          "Comparing the evidence against the selected ICP.",
+        );
+      }
     } else {
       setWorkflowUiStage((s) => advanceWorkflowStage(s, stage));
     }
@@ -545,9 +491,11 @@ export default function Home() {
     serverStageRef.current = "research";
     setWorkflowUiStage("research");
     setAnalysisPercent(8);
-    setAnalysisLabel("Starting job");
+    setAnalysisLabel("Researching the company");
+    setAnalysisDetail(
+      "Looking for relevant business, growth and GTM signals.",
+    );
     setAnalysisSeconds(0);
-    setJobId(null);
     requestAnimationFrame(() => scrollToStage("analysis"));
 
     const profileLabel = selectedProfileLabel();
@@ -601,10 +549,6 @@ export default function Home() {
         return;
       }
 
-      setJobId(payload.jobId);
-      setAnalysisLabel(
-        payload.mock ? "Mock orchestration running" : "Workflow running",
-      );
       setAnalysisPercent(15);
       await pollJobUntilDone(
         payload.jobId,
@@ -621,7 +565,8 @@ export default function Home() {
             serverStageRef.current = "done";
             setWorkflowUiStage("done");
             setAnalysisPercent(100);
-            setAnalysisLabel("Complete");
+            setAnalysisLabel("Analysis complete");
+            setAnalysisDetail("Your prospect report is ready.");
             setIsSubmitting(false);
             window.turnstile?.reset();
             setTurnstileToken("");
@@ -658,11 +603,11 @@ export default function Home() {
     serverStageRef.current = "done";
     setWorkflowUiStage("done");
     setAnalysisPercent(100);
-    setAnalysisLabel("Sample result ready");
+    setAnalysisLabel("Analysis complete");
+    setAnalysisDetail("Your prospect report is ready.");
     scrollToResultsAfterComplete();
   }
 
-  /** Clear form + result state and return to Enter for another run. */
   function startNewAnalysis() {
     pollAbortRef.current?.abort();
     pollAbortRef.current = null;
@@ -671,13 +616,14 @@ export default function Home() {
     setRateLimitModal(null);
     setLiveResult(null);
     setShowSample(false);
-    setJobId(null);
     setIsSubmitting(false);
     setAnalysisSeconds(0);
     setAnalysisPercent(0);
-    setAnalysisLabel("Waiting for a domain");
+    setAnalysisLabel("Waiting for a company");
+    setAnalysisDetail("Enter a company above to begin.");
     setWorkflowUiStage("idle");
     serverStageRef.current = "idle";
+    setShowScoreHow(false);
     window.turnstile?.reset();
     setTurnstileToken("");
     requestAnimationFrame(() => {
@@ -695,6 +641,11 @@ export default function Home() {
     value: p.value,
     label: p.label,
   }));
+
+  const analysisHeading =
+    isSubmitting || workflowUiStage === "done" || workflowUiStage === "failed"
+      ? "Researching the company and building your recommendation."
+      : "See how the analysis works.";
 
   return (
     <main
@@ -787,16 +738,17 @@ export default function Home() {
           <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
             <div className="space-y-7">
               <div className="inline-flex rounded-full border border-amber-200/20 bg-amber-200/10 px-4 py-2 text-sm text-amber-100">
-                n8n-orchestrated GTM research workflow
+                AI-assisted prospect research &amp; qualification
               </div>
               <div className="space-y-5">
                 <h1 className="max-w-4xl text-5xl font-extrabold tracking-tight text-balance sm:text-7xl">
-                  Score ICP fit from a domain — then open the sales playbook.
+                  Find the prospects worth pursuing — and know why now.
                 </h1>
                 <p className="max-w-2xl text-lg leading-8 text-stone-300">
-                  Pick a GTM profile, research public company signals with
-                  Perplexity, score attributes transparently, and generate a
-                  tailored sales strategy via OpenRouter.
+                  Enter a company domain and choose what a good prospect looks
+                  like. The app researches public signals, scores the company
+                  against your criteria, and turns the findings into a
+                  practical sales strategy.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-4">
@@ -805,33 +757,47 @@ export default function Home() {
                   onClick={() => scrollToStage("enter")}
                   className={primaryButtonClass()}
                 >
-                  Run the live demo
+                  Analyze a company
                 </button>
                 <button
                   type="button"
                   onClick={viewSample}
                   className={secondaryButtonClass()}
                 >
-                  View sample result
+                  View sample report
                 </button>
               </div>
             </div>
             <div className="ml-auto w-full max-w-sm space-y-4">
               <div className="rounded-[1.75rem] border border-white/15 bg-black/25 p-4 backdrop-blur">
                 <p className="px-2 pb-3 font-mono text-xs uppercase tracking-[0.22em] text-stone-300">
-                  Workflow
+                  How it works
                 </p>
                 <div className="grid gap-2">
                   {[
-                    "Enter domain + ICP profile",
-                    "n8n research & strategy",
-                    "Display fit score + playbook",
+                    {
+                      title: "Enter a company",
+                      body: "Add the prospect you want to evaluate.",
+                    },
+                    {
+                      title: "Research & score fit",
+                      body: "Find relevant company signals and compare them with your ICP.",
+                    },
+                    {
+                      title: "Get a sales strategy",
+                      body: "See why to approach them, who to target and what angle to use.",
+                    },
                   ].map((item) => (
                     <div
-                      key={item}
-                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-medium text-white"
+                      key={item.title}
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3"
                     >
-                      {item}
+                      <p className="text-sm font-medium text-white">
+                        {item.title}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-stone-400">
+                        {item.body}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -864,20 +830,23 @@ export default function Home() {
           <div className="space-y-5">
             <p className={stageEyebrowClass("cyan")}>Company input</p>
             <h2 className="text-4xl font-bold tracking-tight sm:text-6xl">
-              Start with the target company.
+              Choose a company and what good fit looks like.
             </h2>
             <p className="max-w-xl text-lg leading-8 text-stone-300">
-              Provide a domain and the ICP profile you sell into. Analysis runs
-              through n8n — research first, then strategy, then app-side scoring.
+              Enter the company you want to evaluate and select the Ideal
+              Customer Profile that best represents the prospects you want to
+              pursue.
             </p>
           </div>
           <div className={panelOuterClass()}>
             <div className={panelInnerClass()}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold">Fit analysis</h2>
+                  <h2 className="text-xl font-semibold">
+                    Prospect fit analysis
+                  </h2>
                   <p className="text-sm text-stone-400">
-                    Domain + one GTM profile
+                    1 company · 1 target profile
                   </p>
                 </div>
                 <Pill>{selectedProfileLabel()}</Pill>
@@ -890,7 +859,8 @@ export default function Home() {
                   placeholder="e.g. acme.com"
                 />
                 <SelectEdit
-                  label="ICP / fit profile"
+                  label="Ideal Customer Profile (ICP)"
+                  helper="Choose what your ideal prospect looks like."
                   value={profileId}
                   onChange={setProfileId}
                   options={selectOptions}
@@ -921,7 +891,7 @@ export default function Home() {
                 onClick={() => void startAnalysis()}
                 className={`mt-5 ${solidCtaClass(isSubmitting || !domain.trim())}`}
               >
-                {isSubmitting ? "Starting analysis..." : "Analyze company fit"}
+                {isSubmitting ? "Starting analysis…" : "Analyze prospect"}
               </button>
               {error ? (
                 <p className="mt-4 rounded-2xl border border-red-300/30 bg-red-950/40 p-4 text-sm text-red-100">
@@ -942,14 +912,13 @@ export default function Home() {
         <div className={`absolute inset-0 -z-10 ${slideBackground}`} />
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-center">
           <div className="space-y-5">
-            <p className={stageEyebrowClass("amber")}>Live orchestration</p>
+            <p className={stageEyebrowClass("amber")}>Live analysis</p>
             <h2 className="text-4xl font-bold tracking-tight sm:text-6xl">
-              Research, score, strategize.
+              {analysisHeading}
             </h2>
             <p className="max-w-xl text-lg leading-8 text-stone-300">
-              n8n runs Perplexity and OpenRouter. The app persists the job,
-              applies transparent scoring, and streams status back to this
-              panel.
+              Follow the analysis from company research through fit scoring to
+              the final sales recommendation.
             </p>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
               <div className="flex items-center justify-between gap-4">
@@ -962,20 +931,29 @@ export default function Home() {
                   </span>
                 ) : null}
               </div>
+              <p className="mt-2 text-sm leading-6 text-stone-400">
+                {analysisDetail}
+              </p>
               <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
                 <div
                   className={`h-full rounded-full bg-amber-300 transition-all duration-500 ${isSubmitting ? "animate-pulse" : ""}`}
                   style={{ width: `${analysisPercent}%` }}
                 />
               </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
+                  Powered by
+                </span>
+                <Pill tone="stone">n8n</Pill>
+                <Pill tone="stone">Perplexity</Pill>
+                <Pill tone="stone">OpenRouter</Pill>
+              </div>
               <p className="mt-4 text-sm leading-6 text-stone-400">
                 {isSubmitting
-                  ? jobId
-                    ? `Polling job ${jobId.slice(0, 8)}… every 2s.`
-                    : "Creating analysis job…"
+                  ? "Analysis in progress…"
                   : displayResult
                     ? showSample
-                      ? "Sample path — no Turnstile, no quota."
+                      ? "Sample report ready — illustrative data only."
                       : (
                           <>
                             Analysis complete —{" "}
@@ -986,12 +964,12 @@ export default function Home() {
                               }
                               className="font-medium text-amber-100 underline-offset-2 hover:underline"
                             >
-                              view results
+                              view prospect report
                             </button>
                             .
                           </>
                         )
-                    : "Submit a domain on the Enter stage to start."}
+                    : "Enter a company above to begin."}
               </p>
             </div>
           </div>
@@ -1010,137 +988,283 @@ export default function Home() {
         <div className={`absolute inset-0 -z-10 ${slideBackground}`} />
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
           <div className="space-y-5">
-            <p className={stageEyebrowClass("cyan")}>Fit report</p>
+            <p className={stageEyebrowClass("cyan")}>Prospect report</p>
             <h2 className="text-4xl font-bold tracking-tight sm:text-6xl">
-              Transparent score and strategy.
+              Is this company worth pursuing?
             </h2>
             <p className="max-w-xl text-lg leading-8 text-stone-300">
-              Each attribute shows presence, confidence, and evidence. Strategy
-              is grounded in what research actually found.
+              See how well the company matches your target profile, whether
+              there is a reason to reach out now, who to approach and what
+              angle to use.
             </p>
             {displayResult ? (
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
-                      Overall fit
-                    </p>
-                    <p className="mt-2 text-5xl font-extrabold tracking-tight">
-                      {displayResult.overallScore}
-                    </p>
-                    <p className="mt-1 text-sm text-stone-400">
-                      {displayResult.fitBand} · {displayResult.domain}
-                    </p>
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                        Company
+                      </p>
+                      <p className="mt-1 text-xl font-semibold">
+                        {displayResult.domain}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-400">
+                        ICP · {displayResult.profileLabel}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {showSample ? (
+                        <Pill tone="stone">Illustrative sample</Pill>
+                      ) : null}
+                      {displayResult.fitBand === "Insufficient data" ? (
+                        <Pill tone="amber">Limited evidence</Pill>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {showSample ? (
-                      <Pill tone="stone">Illustrative sample</Pill>
-                    ) : null}
-                    {displayResult.fitBand === "Insufficient data" ? (
-                      <Pill tone="amber">Limited evidence</Pill>
-                    ) : null}
-                    <Pill tone="amber">{displayResult.profileLabel}</Pill>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-stone-500">
+                        Prospect fit
+                      </p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight">
+                        {displayResult.overallScore}
+                        <span className="text-lg font-semibold text-stone-400">
+                          /100
+                        </span>
+                      </p>
+                      <p className="mt-1 text-sm text-stone-400">
+                        {displayResult.fitBand}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-stone-500">
+                        Buying signal
+                      </p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight">
+                        {displayResult.buyingSignal}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-400">
+                        Reason to engage now
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-stone-500">
+                        Priority
+                      </p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight">
+                        {displayResult.priority}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-400">
+                        Time worth spending
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-100/80">
+                        Recommendation
+                      </p>
+                      <Pill tone={levelTone(displayResult.recommendation)}>
+                        {displayResult.recommendation}
+                      </Pill>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-stone-200">
+                      {displayResult.recommendationBlurb}
+                    </p>
                   </div>
                 </div>
                 {showSample ? (
-                  <p className="mt-4 text-sm leading-6 text-stone-400">
-                    Dummy layout preview for Northwind Analytics — not a live
-                    research run. Run Analyze for real Perplexity + strategy
-                    output. Strategy is always seller → prospect (you are
-                    evaluating a potential client).
-                  </p>
-                ) : null}
-                {displayResult.fitBand === "Insufficient data" ? (
-                  <p className="mt-4 text-sm leading-6 text-amber-100/90">
-                    Limited public evidence — score is not a reliable fit
-                    judgment.
+                  <p className="text-sm leading-6 text-stone-500">
+                    Illustrative sample for Northwind Analytics — not a live
+                    research run. Analyze a real domain for live results.
                   </p>
                 ) : null}
               </div>
             ) : (
-              <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.03] p-5 text-sm text-stone-400">
-                Results appear here after a successful analysis. Use{" "}
+              <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.03] p-6">
+                <p className="text-lg font-semibold text-stone-200">
+                  No prospect analyzed yet
+                </p>
+                <p className="mt-2 text-sm leading-6 text-stone-400">
+                  Your fit score and sales recommendation will appear here.
+                </p>
                 <button
                   type="button"
                   onClick={viewSample}
-                  className="font-medium text-amber-100 underline-offset-2 hover:underline"
+                  className={`mt-4 ${secondaryButtonClass()}`}
                 >
-                  View sample result
-                </button>{" "}
-                to preview the layout (illustrative dummy data).
+                  View sample report
+                </button>
               </div>
             )}
           </div>
+
           <div className={panelOuterClass()}>
             {displayResult ? (
               <div className="grid gap-5">
+                {/* Why this company fits */}
                 <div className={panelInnerClass()}>
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
-                        Attribute scores
-                      </p>
-                      <h3 className="mt-2 text-xl font-semibold">
-                        Evidence by signal
-                      </h3>
-                    </div>
-                    <Pill tone="stone">
-                      {displayResult.attributes.length} attributes
-                    </Pill>
-                  </div>
-                  <div className="grid gap-3">
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                    Why this company fits
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold">
+                    ICP criteria vs public evidence
+                  </h3>
+                  <div className="mt-4 grid gap-3">
                     {displayResult.attributes.map((attr) => (
                       <div
                         key={attr.id}
                         className="rounded-2xl border border-white/10 bg-black/20 p-4"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium text-stone-100">
-                            {attr.label}
-                          </span>
-                          <span className="font-mono text-sm text-amber-200">
-                            {attr.score}
-                          </span>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-stone-100">
+                              {attr.label}
+                            </p>
+                            <p className="mt-1 text-xs text-stone-500">
+                              {evidenceStrength(attr.present, attr.confidence)}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-sm text-amber-200">
+                              {attr.score}
+                              <span className="text-stone-500">/100</span>
+                            </p>
+                            <span className="mt-1 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-stone-300">
+                              {confidenceLabel(attr.confidence)}
+                            </span>
+                          </div>
                         </div>
-                        <p className="mt-2 text-sm leading-6 text-stone-400">
+                        <p className="mt-3 text-sm leading-6 text-stone-300">
                           {attr.evidence}
                         </p>
+                        {attr.sourceLabel || attr.sourceUrl ? (
+                          <p className="mt-2 text-xs text-stone-500">
+                            Source:{" "}
+                            {attr.sourceUrl ? (
+                              <a
+                                href={attr.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan-200/90 underline-offset-2 hover:underline"
+                              >
+                                {attr.sourceLabel ?? "Open source"}
+                              </a>
+                            ) : (
+                              (attr.sourceLabel ?? "Public web")
+                            )}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
-                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-amber-200/80">
-                    Sales strategy
+
+                {/* Why now */}
+                <div className="rounded-[1.5rem] border border-amber-300/20 bg-amber-300/[0.07] p-5">
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-amber-200/90">
+                    Why now?
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-stone-100">
+                    {displayResult.whyNowNarrative}
+                  </p>
+                  {displayResult.whyNowSignals.length > 0 ? (
+                    <div className="mt-4 grid gap-2">
+                      {displayResult.whyNowSignals.map((signal) => (
+                        <div
+                          key={`${signal.title}-${signal.detail.slice(0, 24)}`}
+                          className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3"
+                        >
+                          <p className="text-sm font-medium text-amber-50">
+                            {signal.title}
+                          </p>
+                          <p className="mt-1 text-sm leading-6 text-stone-300">
+                            {signal.detail}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Who to approach */}
+                <div className={panelInnerClass()}>
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                    Who to approach
+                  </p>
+                  <p className="mt-3 text-lg font-semibold text-stone-50">
+                    {displayResult.whoToApproach}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-stone-400">
+                    {displayResult.whoToApproachWhy}
+                  </p>
+                  {displayResult.alternativeContact ? (
+                    <p className="mt-3 text-sm text-stone-400">
+                      <span className="font-medium text-stone-300">
+                        Alternative:{" "}
+                      </span>
+                      {displayResult.alternativeContact}
+                    </p>
+                  ) : null}
+                </div>
+
+                {/* Likely challenge */}
+                <div className={panelInnerClass()}>
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-500">
+                    Likely challenge
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Working hypothesis — not confirmed internal fact
                   </p>
                   <p className="mt-3 text-sm leading-7 text-stone-200">
-                    {displayResult.strategy.summary}
+                    {displayResult.likelyChallenge}
                   </p>
-                  <ul className="mt-4 grid gap-2">
-                    {displayResult.strategy.talkTracks.map((track) => (
-                      <li
-                        key={track}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-stone-300"
-                      >
-                        {track}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4">
-                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500">
-                      Next steps
-                    </p>
-                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-stone-300">
-                      {displayResult.strategy.nextSteps.map((step) => (
-                        <li key={step}>{step}</li>
-                      ))}
-                    </ol>
-                  </div>
                 </div>
+
+                {/* Sales angle */}
+                <div className={panelInnerClass()}>
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-amber-200/80">
+                    Recommended sales angle
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-stone-200">
+                    {displayResult.salesAngle}
+                  </p>
+                </div>
+
+                {/* Conversation starter */}
+                <div className={panelInnerClass()}>
+                  <p className="font-mono text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                    Conversation starter
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-stone-200">
+                    {displayResult.conversationStarter}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowScoreHow((v) => !v)}
+                    className="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-stone-200"
+                  >
+                    How is the fit score calculated?
+                    <span className="font-mono text-xs text-stone-500">
+                      {showScoreHow ? "−" : "+"}
+                    </span>
+                  </button>
+                  {showScoreHow ? (
+                    <p className="mt-3 text-sm leading-6 text-stone-400">
+                      Each profile defines weighted fit criteria. Company
+                      research is evaluated against those criteria and the final
+                      score is calculated consistently from the individual
+                      results.
+                    </p>
+                  ) : null}
+                </div>
+
                 <p className="px-1 text-xs leading-5 text-stone-500">
                   {(displayResult.limitations ?? []).join(" ") ||
                     "Public-web estimate only — not investment or legal advice."}
-                  {showSample ? " Sample data is illustrative." : null}
                 </p>
                 <button
                   type="button"
@@ -1151,8 +1275,20 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <div className="rounded-[1.5rem] border border-white/10 bg-[#111816] p-8 text-center text-sm text-stone-400">
-                No result yet. Complete Enter → Analysis, or open the sample.
+              <div className="rounded-[1.5rem] border border-white/10 bg-[#111816] p-8 text-center">
+                <p className="text-lg font-semibold text-stone-200">
+                  No prospect analyzed yet
+                </p>
+                <p className="mt-2 text-sm leading-6 text-stone-400">
+                  Your fit score and sales recommendation will appear here.
+                </p>
+                <button
+                  type="button"
+                  onClick={viewSample}
+                  className={`mt-5 ${secondaryButtonClass()}`}
+                >
+                  View sample report
+                </button>
               </div>
             )}
           </div>

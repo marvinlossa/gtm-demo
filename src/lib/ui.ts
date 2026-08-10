@@ -55,26 +55,29 @@ export type AppStage = "landing" | "enter" | "analysis" | "results";
 
 export const appStages: { id: AppStage; label: string }[] = [
   { id: "landing", label: "Overview" },
-  { id: "enter", label: "Enter" },
+  { id: "enter", label: "Company" },
   { id: "analysis", label: "Analysis" },
-  { id: "results", label: "Results" },
+  { id: "results", label: "Report" },
 ];
 
-/** Static seed labels for the enter form until profiles API lands (PR 3). */
+/** Static seed labels for the enter form until /api/profiles loads. */
 export const SEED_PROFILE_OPTIONS = [
   {
     id: "sales-expansion",
-    label: "Sales Expansion",
-    blurb: "Hiring, markets, funding, B2B motion",
+    label: "GTM Scale-Up",
+    blurb:
+      "Best for identifying growing B2B companies expanding sales teams, markets or commercial activity.",
   },
   {
     id: "product-led-growth",
     label: "Product-Led Growth",
-    blurb: "Self-serve, freemium, docs, loops",
+    blurb:
+      "Best for identifying companies where product, self-serve and product-qualified motions drive acquisition.",
   },
   {
     id: "enterprise-it-modernization",
-    label: "Enterprise IT Modernization",
-    blurb: "Compliance, migration, enterprise buyers",
+    label: "Enterprise Modernization",
+    blurb:
+      "Best for identifying organizations modernizing IT with enterprise buyers, security needs and complex integrations.",
   },
 ] as const;

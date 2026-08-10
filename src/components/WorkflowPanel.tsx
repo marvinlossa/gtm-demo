@@ -1,6 +1,12 @@
 import { Pill } from "@/components/UiPrimitives";
 
-type WorkflowStageKey = "idle" | "research" | "strategy" | "scoring" | "done" | "failed";
+type WorkflowStageKey =
+  | "idle"
+  | "research"
+  | "strategy"
+  | "scoring"
+  | "done"
+  | "failed";
 
 const stageToNode: Record<
   Exclude<WorkflowStageKey, "idle" | "failed">,
@@ -12,9 +18,40 @@ const stageToNode: Record<
   done: "node-done",
 };
 
+const stagePillLabel: Record<WorkflowStageKey, string> = {
+  idle: "Idle",
+  research: "Research",
+  strategy: "Strategy",
+  scoring: "Scoring",
+  done: "Done",
+  failed: "Failed",
+};
+
+type FlowNode = {
+  id: string;
+  title: string;
+  tech?: string;
+};
+
+const FLOW_NODES: FlowNode[] = [
+  { id: "node-trigger", title: "Receive prospect" },
+  {
+    id: "node-research",
+    title: "Research company",
+    tech: "Perplexity",
+  },
+  {
+    id: "node-strategy",
+    title: "Evaluate strategy",
+    tech: "OpenRouter",
+  },
+  { id: "node-score", title: "Calculate fit score" },
+  { id: "node-done", title: "Return prospect report" },
+];
+
 /**
- * Pre-rendered workflow visualization (design: SVG only, no live n8n iframe).
- * Stage highlighting is driven by job stage / heuristic theater.
+ * Pre-rendered workflow visualization (design: SVG-free list, no live n8n iframe).
+ * Stage highlighting is driven by job stage / progress theater.
  */
 export function WorkflowPanel({
   stage = "idle",
@@ -22,9 +59,7 @@ export function WorkflowPanel({
   stage?: WorkflowStageKey;
 }) {
   const activeId =
-    stage === "idle" || stage === "failed"
-      ? null
-      : stageToNode[stage];
+    stage === "idle" || stage === "failed" ? null : stageToNode[stage];
 
   function nodeClass(id: string) {
     const base =
@@ -44,45 +79,45 @@ export function WorkflowPanel({
   return (
     <div className="rounded-[1.75rem] border border-white/15 bg-black/25 p-4 backdrop-blur">
       <div className="mb-3 flex items-center justify-between gap-3 px-1">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-300">
-          n8n workflow
-        </p>
-        <Pill tone={stage === "failed" ? "amber" : stage === "done" ? "cyan" : "stone"}>
-          {stage === "idle" ? "Idle" : stage}
+        <div className="flex items-center gap-2">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-300">
+            Automation
+          </p>
+          <Pill tone="stone">n8n</Pill>
+        </div>
+        <Pill
+          tone={
+            stage === "failed" ? "amber" : stage === "done" ? "cyan" : "stone"
+          }
+        >
+          {stagePillLabel[stage]}
         </Pill>
       </div>
-      <div className="grid gap-2" aria-label="GTM fit analysis workflow">
-        <div id="node-trigger" className={nodeClass("node-trigger")}>
-          1 · Webhook trigger
-        </div>
-        <div className="pl-4 font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
-          ↓
-        </div>
-        <div id="node-research" className={nodeClass("node-research")}>
-          2 · Perplexity research
-        </div>
-        <div className="pl-4 font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
-          ↓
-        </div>
-        <div id="node-strategy" className={nodeClass("node-strategy")}>
-          3 · OpenRouter strategy
-        </div>
-        <div className="pl-4 font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
-          ↓
-        </div>
-        <div id="node-score" className={nodeClass("node-score")}>
-          4 · App scoring.v1
-        </div>
-        <div className="pl-4 font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
-          ↓
-        </div>
-        <div id="node-done" className={nodeClass("node-done")}>
-          5 · Callback → results
-        </div>
+      <div className="grid gap-2" aria-label="Prospect analysis workflow">
+        {FLOW_NODES.map((node, index) => (
+          <div key={node.id}>
+            {index > 0 ? (
+              <div className="pl-4 font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
+                ↓
+              </div>
+            ) : null}
+            <div id={node.id} className={nodeClass(node.id)}>
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  {index + 1} · {node.title}
+                </span>
+                {node.tech ? (
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-400">
+                    {node.tech}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
       <p className="mt-3 px-1 text-xs leading-5 text-stone-500">
-        Live orchestration runs in n8n. This panel is the public demo view of
-        the workflow graph.
+        A simplified view of the automation powering this analysis.
       </p>
     </div>
   );

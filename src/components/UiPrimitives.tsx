@@ -3,14 +3,19 @@ import { inputClass } from "@/lib/ui";
 
 export function Field({
   label,
+  helper,
   children,
 }: {
   label: string;
+  helper?: string;
   children: ReactNode;
 }) {
   return (
     <label className="grid gap-2 text-sm font-normal text-stone-300">
       <span>{label}</span>
+      {helper ? (
+        <span className="-mt-1 text-xs leading-5 text-stone-500">{helper}</span>
+      ) : null}
       {children}
     </label>
   );
@@ -64,17 +69,19 @@ export function TextEdit({
 
 export function SelectEdit({
   label,
+  helper,
   value,
   onChange,
   options,
 }: {
   label: string;
+  helper?: string;
   value: string;
   onChange: (value: string) => void;
   options: ReadonlyArray<{ value: string; label: string }>;
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} helper={helper}>
       <select
         className={inputClass()}
         value={value}
