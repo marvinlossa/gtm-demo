@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* App-wide focus accent: amber/yellow only (matches primary CTAs). */
+:focus-visible {
+  outline: 2px solid #fde68a;
+  outline-offset: 3px;
+}
+
+/*
+ * Form controls use a Tailwind amber ring in page.tsx (inputClass).
+ * Suppress the global outline there so focus is never yellow+cyan or double-drawn.
+ */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

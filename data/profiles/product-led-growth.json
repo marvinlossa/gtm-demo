@@ -1,0 +1,113 @@
+{
+  "id": "product-led-growth",
+  "name": "Product-Led Growth",
+  "description": "Companies where product, self-serve, and product-qualified motions drive acquisition — freemium/trial, docs, community, and collaboration loops.",
+  "version": 1,
+  "attributes": [
+    {
+      "id": "self-serve-product",
+      "label": "Self-serve product",
+      "description": "Users can sign up and use the product without talking to sales.",
+      "weight": 0.2,
+      "researchPrompt": "For company {domain}, determine whether a user can sign up and start using the product without a sales conversation. Look for free signup, in-app onboarding, and Get started CTAs vs sales-gated demos only.",
+      "positiveSignals": [
+        "Free or instant signup",
+        "In-app onboarding",
+        "Get started / start free CTA"
+      ],
+      "negativeSignals": [
+        "Sales-gated demo-only access with no self-serve path"
+      ]
+    },
+    {
+      "id": "freemium-or-trial",
+      "label": "Freemium or trial",
+      "description": "Free tier, freemium, or time-boxed trial.",
+      "weight": 0.18,
+      "researchPrompt": "For company {domain}, find free tier, freemium, or time-boxed trial offers on pricing or product pages.",
+      "positiveSignals": [
+        "Free plan or freemium tier",
+        "Time-boxed trial (e.g. 14-day)",
+        "Free forever core features"
+      ],
+      "negativeSignals": [
+        "Quote-only pricing with no free or trial path"
+      ]
+    },
+    {
+      "id": "usage-based-or-seat",
+      "label": "Usage/seat pricing transparency",
+      "description": "Public pricing by seats, usage, or credits with visible numbers.",
+      "weight": 0.12,
+      "researchPrompt": "For company {domain}, find a public pricing page with seat, usage, or credit-based numbers rather than contact-us-only.",
+      "positiveSignals": [
+        "Public pricing page with numeric plans",
+        "Seat or usage-based tiers",
+        "Credit or consumption pricing explained"
+      ],
+      "negativeSignals": [
+        "Contact us only with no units or prices"
+      ]
+    },
+    {
+      "id": "developer-docs",
+      "label": "Public docs / API",
+      "description": "Public developer documentation, API reference, or SDKs.",
+      "weight": 0.15,
+      "researchPrompt": "For company {domain}, find public developer docs, API reference, OpenAPI, or SDKs (docs subdomain or /docs).",
+      "positiveSignals": [
+        "docs subdomain or /docs site",
+        "API reference or OpenAPI",
+        "Official SDKs"
+      ],
+      "negativeSignals": [
+        "No public API or developer documentation"
+      ]
+    },
+    {
+      "id": "community-presence",
+      "label": "Community / content-led growth",
+      "description": "Community, templates, education content, or open forums.",
+      "weight": 0.12,
+      "researchPrompt": "For company {domain}, find community presence or content-led growth: Discord/Slack community, template gallery, tutorial hub, or education content.",
+      "positiveSignals": [
+        "Discord or Slack community",
+        "Template gallery",
+        "Tutorial or education hub"
+      ],
+      "negativeSignals": [
+        "No community or education surface"
+      ]
+    },
+    {
+      "id": "product-analytics-culture",
+      "label": "Product analytics culture",
+      "description": "Product metrics, experimentation, or PQL/PQA language.",
+      "weight": 0.1,
+      "researchPrompt": "For company {domain}, find mentions of product metrics, activation/retention, experimentation, or PQL/PQA language in blogs or product pages.",
+      "positiveSignals": [
+        "Blog or content on activation/retention",
+        "PQL or product-qualified language",
+        "Experimentation or product analytics culture"
+      ],
+      "negativeSignals": [
+        "Pure sales-led narrative with no product metrics language"
+      ]
+    },
+    {
+      "id": "viral-or-collab",
+      "label": "Collaboration / viral loops",
+      "description": "Multiplayer, sharing, invites, or workspace collaboration.",
+      "weight": 0.13,
+      "researchPrompt": "For company {domain}, find collaboration or viral-loop features: invite teammates, shared workspaces, public share links, or multiplayer editing.",
+      "positiveSignals": [
+        "Invite teammates flows",
+        "Shared workspaces",
+        "Public share or collab links"
+      ],
+      "negativeSignals": [
+        "Single-user only with no share or invite"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "status": "complete",
+  "executionId": "fixture-exec-1",
+  "findings": [
+    {
+      "attributeId": "growing-sales-team",
+      "present": "true",
+      "confidence": 0.85,
+      "scoreHint": 82,
+      "evidence": [
+        {
+          "snippet": "Careers page lists multiple Account Executive openings.",
+          "sourceUrl": "https://example.com/careers"
+        },
+        {
+          "snippet": "Blog post mentions expanding the go-to-market team."
+        }
+      ]
+    },
+    {
+      "attributeId": "new-market-expansion",
+      "present": "true",
+      "confidence": 0.7,
+      "scoreHint": 70,
+      "evidence": [
+        {
+          "snippet": "Press release about opening an EMEA office."
+        }
+      ]
+    },
+    {
+      "attributeId": "recent-funding",
+      "present": "true",
+      "confidence": 0.9,
+      "scoreHint": 88,
+      "evidence": [
+        {
+          "snippet": "Series B announced with a named lead investor."
+        },
+        {
+          "snippet": "Funding used to scale sales and marketing."
+        }
+      ]
+    },
+    {
+      "attributeId": "b2b-offering",
+      "present": "true",
+      "confidence": 0.95,
+      "scoreHint": 92,
+      "evidence": [
+        {
+          "snippet": "Pricing page shows team and enterprise plans."
+        }
+      ]
+    },
+    {
+      "attributeId": "clear-sales-org",
+      "present": "true",
+      "confidence": 0.65,
+      "scoreHint": 60,
+      "evidence": [
+        {
+          "snippet": "Leadership page lists a VP of Sales."
+        }
+      ]
+    },
+    {
+      "attributeId": "outbound-motion",
+      "present": "unknown",
+      "confidence": 0.2,
+      "scoreHint": 30,
+      "evidence": []
+    },
+    {
+      "attributeId": "tech-buyer-signals",
+      "present": "true",
+      "confidence": 0.8,
+      "scoreHint": 75,
+      "evidence": [
+        {
+          "snippet": "Public integrations directory and security page."
+        },
+        {
+          "snippet": "API documentation available for developers."
+        }
+      ]
+    }
+  ],
+  "strategy": {
+    "summary": "Lead with sales capacity and recent funding as proof of scale. Position a short pilot against AE productivity metrics.",
+    "whyNow": [
+      "Hiring and funding suggest budget for tooling this cycle.",
+      "Multi-market expansion increases coordination pain."
+    ],
+    "entryPoints": [
+      "VP Sales / CRO",
+      "RevOps lead"
+    ],
+    "talkTracks": [
+      {
+        "title": "Hiring velocity",
+        "script": "Teams adding AEs often struggle with ramp and handoffs — we compress that loop.",
+        "tiedAttributeIds": ["growing-sales-team", "clear-sales-org"]
+      }
+    ],
+    "discoveryQuestions": [
+      "How many AEs are you ramping this quarter?",
+      "Who owns the outbound tech stack?"
+    ],
+    "risksAndObjections": [
+      "May already have a preferred stack from the last raise."
+    ],
+    "nextSteps": [
+      "Book a 20-minute discovery with RevOps",
+      "Share two peer case studies",
+      "Propose a 30-day pilot"
+    ]
+  },
+  "meta": {
+    "perplexityModel": "fixture",
+    "openRouterModel": "fixture",
+    "durationMs": 90000,
+    "stage": "strategy"
+  }
+}

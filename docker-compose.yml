@@ -1,0 +1,73 @@
+# Local multi-service stack for GTM Fit Analyzer.
+# App usually runs via `npm run dev` on the host; n8n runs here.
+#
+#   docker compose up n8n
+#   # import n8n/workflows/gtm-fit-analysis.json, activate, copy production webhook URL
+#
+# Linux: host.docker.internal is mapped via extra_hosts so n8n can callback to the app.
+
+services:
+  n8n:
+    image: n8nio/n8n:1.103.0
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      # Basic auth for the editor (change for anything non-local)
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-admin}
+      # Shared secrets (must match app .env.local)
+      GTM_WEBHOOK_SECRET: ${GTM_WEBHOOK_SECRET:-dev-webhook-secret}
+      GTM_CALLBACK_SECRET: ${GTM_CALLBACK_SECRET:-dev-callback-secret}
+      # Provider keys (n8n-only in production)
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      PERPLEXITY_RESEARCH_MODEL: ${PERPLEXITY_RESEARCH_MODEL:-perplexity/sonar}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_STRATEGY_MODEL: ${OPENROUTER_STRATEGY_MODEL:-x-ai/grok-4.3}
+      # Where n8n reaches the Next.js app (callback URL base is set by the app payload;
+      # this is used for OpenRouter HTTP-Referer and optional workflow defaults)
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://host.docker.internal:3000}
+      # Concurrency: keep modest for cost control (app MAX_INFLIGHT_JOBS=3)
+      N8N_CONCURRENCY_PRODUCTION: "2"
+      EXECUTIONS_TIMEOUT: "300"
+      EXECUTIONS_TIMEOUT_MAX: "360"
+      # Persist workflow state
+      GENERIC_TIMEZONE: UTC
+      TZ: UTC
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Optional: run the Next app in Docker (usually prefer host `npm run dev`)
+  # app:
+  #   build: .
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     SQLITE_PATH: /data/gtm-demo.sqlite
+  #     MOCK_N8N: "0"
+  #     N8N_WEBHOOK_URL: http://n8n:5678/webhook/gtm-fit-analysis
+  #     GTM_WEBHOOK_SECRET: ${GTM_WEBHOOK_SECRET:-dev-webhook-secret}
+  #     GTM_CALLBACK_SECRET: ${GTM_CALLBACK_SECRET:-dev-callback-secret}
+  #     NEXT_PUBLIC_APP_URL: http://localhost:3000
+  #     APP_PUBLIC_URL: http://app:3000
+  #   volumes:
+  #     - app_data:/data
+  #   depends_on:
+  #     - n8n
+
+volumes:
+  n8n_data:
+  # app_data:

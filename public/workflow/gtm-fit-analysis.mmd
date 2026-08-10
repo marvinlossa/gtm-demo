@@ -1,0 +1,12 @@
+flowchart LR
+  A[Webhook · Respond Immediately] --> B[Validate secret + prompt]
+  B -->|invalid| X1[Failed callback]
+  B -->|ok| C[Progress research]
+  C --> D[Perplexity Agent]
+  D --> E[Parse findings]
+  E -->|fail| X2[Failed callback]
+  E -->|ok| F[Progress strategy]
+  F --> G[OpenRouter strategy]
+  G --> H[Assemble body]
+  H -->|fail| X3[Failed callback]
+  H -->|ok| I[Complete callback]

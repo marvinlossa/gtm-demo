@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 340" role="img" aria-label="GTM fit analysis n8n workflow">
+  <rect width="360" height="340" fill="#0b1210"/>
+  <text x="16" y="28" fill="#67e8f9" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2">N8N · GTM-FIT-ANALYSIS</text>
+  <rect x="16" y="48" width="328" height="34" rx="12" fill="#ffffff12" stroke="#fcd34d55"/>
+  <text x="28" y="70" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">1 · Webhook (Respond Immediately)</text>
+  <rect x="16" y="92" width="328" height="34" rx="12" fill="#ffffff12" stroke="#ffffff22"/>
+  <text x="28" y="114" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">2 · Validate secret + research prompt</text>
+  <rect x="16" y="136" width="328" height="34" rx="12" fill="#ffffff12" stroke="#38bdf855" id="node-research"/>
+  <text x="28" y="158" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">3 · Perplexity Agent research</text>
+  <rect x="16" y="180" width="328" height="34" rx="12" fill="#ffffff12" stroke="#ffffff22"/>
+  <text x="28" y="202" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">4 · Parse &amp; normalize findings</text>
+  <rect x="16" y="224" width="328" height="34" rx="12" fill="#ffffff12" stroke="#f59e0b55" id="node-strategy"/>
+  <text x="28" y="246" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">5 · OpenRouter strategy (Grok 4.3)</text>
+  <rect x="16" y="268" width="328" height="34" rx="12" fill="#ffffff12" stroke="#ffffff22" id="node-score"/>
+  <text x="28" y="290" fill="#fafaf9" font-family="system-ui,sans-serif" font-size="13">6 · App scoring.v1 (callback)</text>
+  <rect x="16" y="304" width="328" height="28" rx="12" fill="#ffffff08" stroke="#ffffff18" id="node-done"/>
+  <text x="28" y="322" fill="#a8a29e" font-family="system-ui,sans-serif" font-size="12">7 · Results UI</text>
+</svg>

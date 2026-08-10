@@ -1,0 +1,114 @@
+{
+  "id": "sales-expansion",
+  "name": "Sales Expansion",
+  "description": "Companies scaling outbound or enterprise sales motions after product-market traction — hiring sellers, entering markets, and investing in GTM capacity.",
+  "version": 1,
+  "attributes": [
+    {
+      "id": "growing-sales-team",
+      "label": "Growing sales team",
+      "description": "Evidence of expanding AE/SDR/sales capacity.",
+      "weight": 0.2,
+      "researchPrompt": "For company {domain}, find public evidence of a growing sales team: open AE/SDR/Account Executive/Sales Development roles on careers pages, news about sales hiring, or headcount growth in sales. Prefer primary sources from the last 18 months.",
+      "positiveSignals": [
+        "Open AE or SDR job postings",
+        "Press about expanding the sales team",
+        "Multiple sales leadership roles listed"
+      ],
+      "negativeSignals": [
+        "Sales hiring freeze announcements",
+        "Recent sales org layoffs"
+      ]
+    },
+    {
+      "id": "new-market-expansion",
+      "label": "New market expansion",
+      "description": "Geographic or segment expansion beyond a single core market.",
+      "weight": 0.18,
+      "researchPrompt": "For company {domain}, find public evidence of new market expansion: new country/region launches, new offices, localization, multi-country pricing, or press about expanding into new geographies in the last 24 months.",
+      "positiveSignals": [
+        "New region or country launch announcements",
+        "New office openings outside HQ market",
+        "Multi-country pricing or localization"
+      ],
+      "negativeSignals": [
+        "Explicit single-market-only positioning with no expansion plans"
+      ]
+    },
+    {
+      "id": "recent-funding",
+      "label": "Recent funding",
+      "description": "Recent venture or growth capital that funds GTM scale.",
+      "weight": 0.15,
+      "researchPrompt": "For company {domain}, find funding rounds (Series A–E, growth equity, or similar) announced in roughly the last 24 months. Prefer primary sources naming round size, stage, and lead investor.",
+      "positiveSignals": [
+        "Announced funding round in last ~24 months",
+        "Named lead investor",
+        "Growth equity or late-stage raise for expansion"
+      ],
+      "negativeSignals": [
+        "Explicit bootstrapped-only with no institutional raise"
+      ]
+    },
+    {
+      "id": "b2b-offering",
+      "label": "B2B offering",
+      "description": "Product sold primarily to businesses rather than pure B2C.",
+      "weight": 0.15,
+      "researchPrompt": "For company {domain}, determine whether the offering is sold B2B or B2B2C vs pure B2C. Look at pricing for teams, enterprise pages, business ICP language, and case studies.",
+      "positiveSignals": [
+        "Team or enterprise pricing",
+        "Business/ICP language on site",
+        "B2B case studies"
+      ],
+      "negativeSignals": [
+        "Pure consumer marketplace or B2C-only positioning"
+      ]
+    },
+    {
+      "id": "clear-sales-org",
+      "label": "Clear sales organization",
+      "description": "Named sales leadership and/or described sales motion.",
+      "weight": 0.12,
+      "researchPrompt": "For company {domain}, find evidence of a sales organization: CRO, VP Sales, Head of Sales titles, sales methodology mentions, or enterprise sales pages.",
+      "positiveSignals": [
+        "CRO or VP Sales leadership",
+        "Enterprise sales page or sales methodology",
+        "Named account executive function"
+      ],
+      "negativeSignals": [
+        "No sales function; pure self-serve with no sales team"
+      ]
+    },
+    {
+      "id": "outbound-motion",
+      "label": "Outbound / GTM motion",
+      "description": "Outbound, SDR, partner, or sales-assisted GTM signals.",
+      "weight": 0.1,
+      "researchPrompt": "For company {domain}, find evidence of outbound or assisted GTM: SDR motion, outbound case studies, partner/channel programs, or PLG + sales-assisted language.",
+      "positiveSignals": [
+        "Outbound or SDR case studies",
+        "Partner or channel program",
+        "Sales-assisted PLG language"
+      ],
+      "negativeSignals": [
+        "Explicit no-sales-calls / never talk to sales only"
+      ]
+    },
+    {
+      "id": "tech-buyer-signals",
+      "label": "Tech/ops buyer signals",
+      "description": "Surfaces aimed at technical or ops buyers (integrations, security, API).",
+      "weight": 0.1,
+      "researchPrompt": "For company {domain}, find technical buyer surfaces: integrations directory, security/trust page, API docs, or stack pages aimed at engineering/ops buyers.",
+      "positiveSignals": [
+        "Integrations directory",
+        "Security or trust page",
+        "Public API documentation"
+      ],
+      "negativeSignals": [
+        "No technical buyer surface on the public site"
+      ]
+    }
+  ]
+}

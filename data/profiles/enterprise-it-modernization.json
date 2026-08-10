@@ -1,0 +1,113 @@
+{
+  "id": "enterprise-it-modernization",
+  "name": "Enterprise IT Modernization",
+  "description": "Organizations modernizing IT — enterprise customers, legacy migration, security/compliance, cloud transformation, and complex integrations.",
+  "version": 1,
+  "attributes": [
+    {
+      "id": "enterprise-customers",
+      "label": "Enterprise customer base",
+      "description": "Named enterprise logos, case studies, or Global 2000 customers.",
+      "weight": 0.18,
+      "researchPrompt": "For company {domain}, find enterprise customer evidence: logo walls, Fortune/Global 2000 case studies, or named large enterprise customers.",
+      "positiveSignals": [
+        "Enterprise case studies",
+        "Logo wall with large brands",
+        "Fortune or Global 2000 references"
+      ],
+      "negativeSignals": [
+        "SMB-only positioning with no enterprise proof"
+      ]
+    },
+    {
+      "id": "legacy-stack-signals",
+      "label": "Legacy / migration signals",
+      "description": "Migration from legacy, mainframe, on-prem, or replace language.",
+      "weight": 0.15,
+      "researchPrompt": "For company {domain}, find legacy or migration signals: migration guides, replace legacy X language, mainframe/on-prem modernization stories.",
+      "positiveSignals": [
+        "Migration guides from legacy systems",
+        "Replace on-prem / legacy messaging",
+        "Mainframe or legacy modernization content"
+      ],
+      "negativeSignals": [
+        "Greenfield-only consumer app with no migration story"
+      ]
+    },
+    {
+      "id": "security-compliance",
+      "label": "Security & compliance",
+      "description": "SOC2, ISO, HIPAA, FedRAMP, or trust center presence.",
+      "weight": 0.18,
+      "researchPrompt": "For company {domain}, find security and compliance evidence: SOC2, ISO, HIPAA, FedRAMP, trust center, or compliance badges.",
+      "positiveSignals": [
+        "Trust center page",
+        "SOC2 / ISO / HIPAA / FedRAMP mentions",
+        "Compliance badges on site"
+      ],
+      "negativeSignals": [
+        "No security or compliance page"
+      ]
+    },
+    {
+      "id": "it-leadership-hires",
+      "label": "IT/CIO leadership activity",
+      "description": "CIO/CTO/CISO hiring or leadership commentary on IT transformation.",
+      "weight": 0.12,
+      "researchPrompt": "For company {domain}, find IT leadership activity: CIO/CTO/CISO hires in the news, or leadership commentary on IT transformation.",
+      "positiveSignals": [
+        "CIO/CTO/CISO hire news",
+        "IT transformation leadership blog or interviews",
+        "Named IT executive sponsors in case studies"
+      ],
+      "negativeSignals": [
+        "No IT leadership signal in public sources"
+      ]
+    },
+    {
+      "id": "cloud-transformation",
+      "label": "Cloud transformation narrative",
+      "description": "Cloud migration, modernization, or hybrid cloud stories.",
+      "weight": 0.15,
+      "researchPrompt": "For company {domain}, find cloud transformation narrative: cloud migration, modernization programs, hybrid cloud, or cloud partnership stories.",
+      "positiveSignals": [
+        "Cloud partnership announcements",
+        "Modernization or cloud migration offering",
+        "Hybrid cloud case studies"
+      ],
+      "negativeSignals": [
+        "Explicitly anti-cloud / on-prem only with no cloud story"
+      ]
+    },
+    {
+      "id": "budget-or-rfp",
+      "label": "Budget / RFP / digital initiatives",
+      "description": "Digital transformation programs, RFPs, or modernization budgets.",
+      "weight": 0.12,
+      "researchPrompt": "For company {domain}, find budget, RFP, or digital initiative signals: RFPs, transformation programs, or modernization budget mentions.",
+      "positiveSignals": [
+        "RFP or procurement mentions",
+        "Digital transformation initiative",
+        "Modernization budget or program"
+      ],
+      "negativeSignals": [
+        "No budget or initiative signals"
+      ]
+    },
+    {
+      "id": "integration-complexity",
+      "label": "Complex integration surface",
+      "description": "Enterprise integrations (ERP, IAM, SIEM, ITSM) and SSO/SAML.",
+      "weight": 0.1,
+      "researchPrompt": "For company {domain}, find complex enterprise integrations: ERP, IAM, SIEM, ITSM connectors, SSO/SAML, or long enterprise connector lists.",
+      "positiveSignals": [
+        "Enterprise connector list",
+        "SSO/SAML support",
+        "ERP/IAM/SIEM/ITSM integrations"
+      ],
+      "negativeSignals": [
+        "No integrations surface"
+      ]
+    }
+  ]
+}
