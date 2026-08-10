@@ -41,6 +41,27 @@ type WorkflowUiStage =
   | "done"
   | "failed";
 
+/** Monotonic rank — UI stage must never move backwards (stops research↔strategy flicker). */
+const WORKFLOW_STAGE_RANK: Record<WorkflowUiStage, number> = {
+  idle: 0,
+  research: 1,
+  strategy: 2,
+  scoring: 3,
+  done: 4,
+  failed: 5,
+};
+
+function advanceWorkflowStage(
+  current: WorkflowUiStage,
+  next: WorkflowUiStage,
+): WorkflowUiStage {
+  if (next === "failed") return "failed";
+  if (current === "failed") return current;
+  return WORKFLOW_STAGE_RANK[next] >= WORKFLOW_STAGE_RANK[current]
+    ? next
+    : current;
+}
+
 type RateLimitModal = {
   title: string;
   message: string;
@@ -212,6 +233,7 @@ async function pollJobUntilDone(
     }
     const job = (await response.json()) as JobPollResponse;
 
+    // Server stage is authoritative; parent applies monotonic advance.
     if (job.stage === "strategy") {
       handlers.onStage("strategy", "Drafting sales strategy", 70);
     } else if (job.stage === "research") {
@@ -273,6 +295,8 @@ export default function Home() {
   const analysisRef = useRef<HTMLElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
+  /** Highest stage seen from server polls — heuristic must not override this. */
+  const serverStageRef = useRef<WorkflowUiStage>("idle");
 
   function scrollToStage(stage: AppStage) {
     ({
@@ -359,33 +383,50 @@ export default function Home() {
     const timer = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
       setAnalysisSeconds(Math.floor(elapsed / 1000));
-      // Heuristic theater until server stage updates (design: 0–45 research, 45–100 strategy).
+
+      // Progress bar only from elapsed time (monotonic fill).
       if (elapsed < 45_000) {
-        setWorkflowUiStage((s) => (s === "strategy" || s === "done" ? s : "research"));
-        setAnalysisLabel((label) =>
-          label.startsWith("Drafting") || label.startsWith("Scoring")
-            ? label
-            : "Researching company signals",
-        );
         setAnalysisPercent((p) =>
           Math.max(p, Math.min(55, 8 + (elapsed / 45_000) * 47)),
         );
       } else if (elapsed < 100_000) {
-        setWorkflowUiStage((s) => (s === "done" ? s : "strategy"));
-        setAnalysisLabel((label) =>
-          label.startsWith("Scoring") ? label : "Drafting sales strategy",
-        );
         setAnalysisPercent((p) =>
           Math.max(p, Math.min(92, 55 + ((elapsed - 45_000) / 55_000) * 37)),
         );
       } else {
-        setWorkflowUiStage((s) => (s === "done" ? s : "strategy"));
-        setAnalysisLabel((label) =>
-          label.startsWith("Scoring") || label.startsWith("Complete")
-            ? label
-            : "Finalizing",
-        );
         setAnalysisPercent((p) => Math.max(p, 94));
+      }
+
+      // Stage theater is strictly monotonic and never overrides a higher server stage.
+      // Bug we fixed: after 45s heuristic forced "strategy" while poll still returned
+      // stage=research every 2s → UI jumped research ↔ strategy.
+      const server = serverStageRef.current;
+      if (
+        server === "done" ||
+        server === "failed" ||
+        server === "scoring" ||
+        server === "strategy"
+      ) {
+        // Label for long waits once strategy is already known
+        if (server === "strategy" && elapsed >= 100_000) {
+          setAnalysisLabel((label) =>
+            label.startsWith("Scoring") || label.startsWith("Complete")
+              ? label
+              : "Finalizing",
+          );
+        }
+        return;
+      }
+
+      if (elapsed < 45_000) {
+        setWorkflowUiStage((s) => advanceWorkflowStage(s, "research"));
+        setAnalysisLabel("Researching company signals");
+      } else {
+        // Optimistic advance only when server has not yet reported strategy.
+        setWorkflowUiStage((s) => advanceWorkflowStage(s, "strategy"));
+        setAnalysisLabel(
+          elapsed < 100_000 ? "Drafting sales strategy" : "Finalizing",
+        );
       }
     }, 250);
     return () => window.clearInterval(timer);
@@ -408,10 +449,26 @@ export default function Home() {
   function resetAnalysisUi() {
     setIsSubmitting(false);
     setWorkflowUiStage("idle");
+    serverStageRef.current = "idle";
     setAnalysisPercent(0);
     setAnalysisLabel("Waiting for a domain");
     window.turnstile?.reset();
     setTurnstileToken("");
+  }
+
+  function applyStage(stage: WorkflowUiStage, label: string, percent: number) {
+    const prev = serverStageRef.current;
+    const next = advanceWorkflowStage(prev, stage);
+    serverStageRef.current = next;
+    // Only rewrite label when we actually advance (or first set) — avoids
+    // "Researching"/"Drafting" thrash when poll re-sends an older stage.
+    if (WORKFLOW_STAGE_RANK[next] > WORKFLOW_STAGE_RANK[prev] || prev === "idle") {
+      setWorkflowUiStage(next);
+      setAnalysisLabel(label);
+    } else {
+      setWorkflowUiStage((s) => advanceWorkflowStage(s, stage));
+    }
+    setAnalysisPercent((p) => Math.max(p, percent));
   }
 
   async function startAnalysis() {
@@ -430,6 +487,7 @@ export default function Home() {
 
     setShowSample(false);
     setIsSubmitting(true);
+    serverStageRef.current = "research";
     setWorkflowUiStage("research");
     setAnalysisPercent(8);
     setAnalysisLabel("Starting job");
@@ -500,13 +558,12 @@ export default function Home() {
         abort.signal,
         {
           onStage: (stage, label, percent) => {
-            setWorkflowUiStage(stage);
-            setAnalysisLabel(label);
-            setAnalysisPercent((p) => Math.max(p, percent));
+            applyStage(stage, label, percent);
           },
           onComplete: (result) => {
             setLiveResult(result);
             setShowSample(false);
+            serverStageRef.current = "done";
             setWorkflowUiStage("done");
             setAnalysisPercent(100);
             setAnalysisLabel("Complete");
@@ -517,11 +574,13 @@ export default function Home() {
           },
           onFailed: (message) => {
             setError(message);
+            serverStageRef.current = "failed";
             setWorkflowUiStage("failed");
             resetAnalysisUi();
           },
           onTimeout: () => {
             setError("Analysis timed out waiting for results. Try again.");
+            serverStageRef.current = "failed";
             setWorkflowUiStage("failed");
             resetAnalysisUi();
           },
@@ -541,6 +600,7 @@ export default function Home() {
     setLiveResult(null);
     setShowSample(true);
     setIsSubmitting(false);
+    serverStageRef.current = "done";
     setWorkflowUiStage("done");
     setAnalysisPercent(100);
     setAnalysisLabel("Sample result ready");
