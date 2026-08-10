@@ -642,7 +642,7 @@ export default function Home() {
 
   /**
    * Simulate the live-analysis path for the sample report (no workflow trigger).
-   * Walks progress + workflow nodes, then opens the illustrative result.
+   * Walks progress + workflow nodes, then opens the cached ramp.com report.
    */
   async function viewSample() {
     if (isSubmitting || isSimulatingSample) return;
@@ -1106,12 +1106,12 @@ export default function Home() {
               </div>
               <p className="mt-4 text-sm leading-6 text-stone-400">
                 {isSimulatingSample
-                  ? "Sample walkthrough — no live research (illustrative only)."
+                  ? "Sample walkthrough — cached ramp.com report (no new API spend)."
                   : isSubmitting
                     ? "Analysis in progress…"
                     : displayResult
                       ? showSample
-                        ? "Sample report ready — illustrative data only."
+                        ? "Sample report ready — real ramp.com analysis, cached for the demo."
                         : (
                             <>
                               Analysis complete —{" "}
@@ -1172,7 +1172,7 @@ export default function Home() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {showSample ? (
-                        <Pill tone="stone">Illustrative sample</Pill>
+                        <Pill tone="stone">Sample · ramp.com</Pill>
                       ) : null}
                       {displayResult.fitBand === "Insufficient data" ? (
                         <Pill tone="amber">Limited evidence</Pill>
@@ -1233,8 +1233,9 @@ export default function Home() {
                 </div>
                 {showSample ? (
                   <p className="text-sm leading-6 text-stone-500">
-                    Illustrative sample for Northwind Analytics — not a live
-                    research run. Analyze a real domain for live results.
+                    Sample based on a real analysis of ramp.com (cached for the
+                    walkthrough — no live re-run). Analyze another domain for a
+                    fresh research job.
                   </p>
                 ) : null}
               </div>

@@ -170,114 +170,14 @@ export function deriveRecommendation(input: {
   };
 }
 
-/**
- * Client-only sample so visitors can see a full report without burning quota.
- * Framed as seller → prospect (reader analyzes a potential client).
- */
-export const SAMPLE_RESULT: DisplayResult = {
-  domain: "northwind-analytics.com",
-  profileLabel: "GTM Scale-Up",
-  overallScore: 84,
-  fitBand: "Strong fit",
-  buyingSignal: "High",
-  priority: "High",
-  recommendation: "Pursue",
-  recommendationBlurb:
-    "Strong prospect fit and current buying signals make this company worth approaching now.",
-  attributes: [
-    {
-      id: "growing-sales-team",
-      label: "Growing sales team",
-      score: 86,
-      present: "true",
-      confidence: 0.85,
-      evidence:
-        "Careers lists AE and SDR openings in the US and EMEA; a blog post notes GTM headcount growth after the raise.",
-      sourceLabel: "Company careers page",
-      sourceUrl: "https://northwind-analytics.com/careers",
-    },
-    {
-      id: "new-market-expansion",
-      label: "New market expansion",
-      score: 80,
-      present: "true",
-      confidence: 0.78,
-      evidence:
-        "Press notes recent expansion into two European markets with localized pricing pages.",
-      sourceLabel: "Company announcement",
-      sourceUrl: "https://northwind-analytics.com/press",
-    },
-    {
-      id: "recent-funding",
-      label: "Recent funding",
-      score: 90,
-      present: "true",
-      confidence: 0.9,
-      evidence:
-        "Series B announcement cites a growth fund and plans to scale go-to-market.",
-      sourceLabel: "Company announcement",
-      sourceUrl: "https://northwind-analytics.com/press/series-b",
-    },
-    {
-      id: "b2b-offering",
-      label: "B2B offering",
-      score: 92,
-      present: "true",
-      confidence: 0.92,
-      evidence:
-        "Team and enterprise pricing plus case studies aimed at mid-market analytics buyers.",
-      sourceLabel: "Company website",
-      sourceUrl: "https://northwind-analytics.com/pricing",
-    },
-    {
-      id: "clear-sales-org",
-      label: "Clear sales organization",
-      score: 72,
-      present: "true",
-      confidence: 0.7,
-      evidence:
-        "Leadership page lists a VP of Sales; enterprise page describes AE-led evaluation.",
-      sourceLabel: "Company website",
-      sourceUrl: "https://northwind-analytics.com/about",
-    },
-  ],
-  whyNowNarrative:
-    "The company is expanding into two new markets while actively hiring commercial roles, suggesting its GTM operation is entering a new growth phase.",
-  whyNowSignals: [
-    {
-      title: "Sales hiring",
-      detail: "Multiple commercial roles currently advertised across regions.",
-    },
-    {
-      title: "Market expansion",
-      detail: "Recently entered two European markets with localized pages.",
-    },
-    {
-      title: "Funding for GTM",
-      detail: "Series B framed as capital to scale go-to-market capacity.",
-    },
-  ],
-  whoToApproach: "VP Sales / Head of Revenue Operations",
-  whoToApproachWhy:
-    "Likely owner of the processes affected by the company’s current commercial expansion.",
-  alternativeContact: "COO",
-  likelyChallenge:
-    "Rapid commercial growth may be increasing the amount of manual prospect research, qualification and sales operations work required from the team.",
-  salesAngle:
-    "Position AI-assisted prospect research as a way to scale outbound activity without increasing repetitive research work at the same rate as headcount.",
-  conversationStarter:
-    "“I noticed you’re expanding the commercial team while entering additional European markets. At that stage, prospect research and qualification often become increasingly manual. We’ve been working on ways to automate that part of the GTM workflow…”",
-  limitations: [
-    "Illustrative sample only — not live research.",
-    "Public-web estimate style; not investment or legal advice.",
-  ],
-};
-
 export type JobStrategyPayload = {
   summary?: string;
   whyNow?: string[];
   entryPoints?: string[];
-  talkTracks?: Array<{ title?: string; script?: string } | string>;
+  talkTracks?: Array<
+    | { title?: string; script?: string; tiedAttributeIds?: string[] }
+    | string
+  >;
   discoveryQuestions?: string[];
   risksAndObjections?: string[];
   nextSteps?: string[];
@@ -388,3 +288,137 @@ export function buildDisplayResult(input: {
     limitations: input.limitations,
   };
 }
+
+/**
+ * Sample report for the walkthrough — based on a real live analysis of ramp.com
+ * (GTM Scale-Up / sales-expansion), cached in the client so demos don’t re-spend API quota.
+ * Framed as seller → prospect (reader analyzes a potential client).
+ */
+export const SAMPLE_RESULT: DisplayResult = buildDisplayResult({
+  domain: "ramp.com",
+  profileLabel: "GTM Scale-Up",
+  overallScore: 86,
+  fitBand: "Strong fit",
+  attributes: [
+    {
+      id: "growing-sales-team",
+      label: "Growing sales team",
+      score: 86,
+      present: "true",
+      confidence: 0.9,
+      evidence:
+        "Careers lists multiple Account Executive, Strategic AE, and Enterprise AE roles; recent sales leadership hiring (Head of Enterprise Sales, VP of Sales).",
+      sourceLabel: "Company careers page",
+      sourceUrl: "https://ramp.com/careers",
+    },
+    {
+      id: "new-market-expansion",
+      label: "New market expansion",
+      score: 79,
+      present: "true",
+      confidence: 0.85,
+      evidence:
+        "Corporate card and spend platform launched in Canada as a first major international market, with localized signup and support.",
+      sourceLabel: "CNBC",
+      sourceUrl:
+        "https://www.cnbc.com/2024-06-19/ramp-launches-in-canada-for-businesses-to-track-spending-and-save-on-fees.html",
+    },
+    {
+      id: "recent-funding",
+      label: "Recent funding",
+      score: 93,
+      present: "true",
+      confidence: 0.95,
+      evidence:
+        "Series D (~$300M, late 2023) led by Founders Fund; growth capital framed for product, sales, and international expansion.",
+      sourceLabel: "TechCrunch",
+      sourceUrl:
+        "https://techcrunch.com/2023-11-15/ramp-raises-300-million-series-d-at-8-1-billion-valuation/",
+    },
+    {
+      id: "b2b-offering",
+      label: "B2B offering",
+      score: 100,
+      present: "true",
+      confidence: 1,
+      evidence:
+        "Business spend management for mid-market and enterprise; team/enterprise plans and B2B customer stories (e.g. HubSpot, Monday, Figma).",
+      sourceLabel: "Company website",
+      sourceUrl: "https://ramp.com/customers",
+    },
+    {
+      id: "clear-sales-org",
+      label: "Clear sales organization",
+      score: 86,
+      present: "true",
+      confidence: 0.9,
+      evidence:
+        "Leadership and careers surface VP/Head of Sales titles; enterprise page describes AE-led evaluation for larger deals.",
+      sourceLabel: "Company website",
+      sourceUrl: "https://ramp.com/enterprise",
+    },
+    {
+      id: "outbound-motion",
+      label: "Outbound / GTM motion",
+      score: 72,
+      present: "true",
+      confidence: 0.8,
+      evidence:
+        "SDR and AE roles on careers plus sales-assisted enterprise motion; press notes scaling of outbound sales capacity.",
+      sourceLabel: "Company careers page",
+      sourceUrl: "https://ramp.com/careers",
+    },
+    {
+      id: "tech-buyer-signals",
+      label: "Tech/ops buyer signals",
+      score: 79,
+      present: "true",
+      confidence: 0.85,
+      evidence:
+        "Integrations directory, security/trust (SOC 2), and public API docs for engineering and ops buyers.",
+      sourceLabel: "Company website",
+      sourceUrl: "https://ramp.com/integrations",
+    },
+  ],
+  strategy: {
+    summary:
+      "Approach Ramp via sales leadership and RevOps on AE ramp and international expansion pain suggested by open roles and the Canada launch; propose a narrow pilot tied to outbound motion and post–Series D scale.",
+    whyNow: [
+      "Active sales team growth: multiple open AE/enterprise sales roles and recent sales leadership hires",
+      "Series D capital aimed at sales and international expansion",
+      "Canada market launch creates pressure for scalable outbound processes across regions",
+    ],
+    entryPoints: [
+      "VP of Enterprise Sales / Head of Sales",
+      "RevOps or sales enablement",
+      "Hiring managers for SDR/AE pods",
+    ],
+    talkTracks: [
+      {
+        title: "Open on sales team scaling",
+        script:
+          "“Saw Ramp posting multiple AE and enterprise AE roles alongside new sales leadership. Teams in that phase often hit ramp time and pipeline consistency issues when expanding into markets like Canada — is that showing up in your pods?”",
+        tiedAttributeIds: ["growing-sales-team", "new-market-expansion"],
+      },
+      {
+        title: "Tie to funding and outbound motion",
+        script:
+          "“With growth capital earmarked for sales and international expansion, peers usually look for ways to shorten ramp cycles without adding research headcount at the same rate. Happy to compare notes on a single enterprise pod.”",
+        tiedAttributeIds: ["recent-funding", "outbound-motion"],
+      },
+    ],
+    risksAndObjections: [
+      "Ramp already has deep integrations and API surfaces — validate that any pitch is not overlapping internal tooling priorities.",
+      "Sales leadership may prefer building enablement in-house given the maturity of the sales org.",
+    ],
+    nextSteps: [
+      "Map public VP Enterprise Sales / RevOps titles for outbound",
+      "Personalize first touch with open AE roles and Canada launch",
+      "Offer a short pilot scoped to one pod ramping enterprise AEs",
+    ],
+  },
+  limitations: [
+    "Sample report based on a real public-web analysis of ramp.com (cached for the demo walkthrough).",
+    "Public-web estimate only — not investment, credit, or legal advice.",
+  ],
+});
