@@ -206,7 +206,7 @@ function levelTone(level: string): "cyan" | "amber" | "stone" {
 
 export default function Home() {
   const [activeStage, setActiveStage] = useState<AppStage>("landing");
-  const [domain, setDomain] = useState("");
+  const [domain, setDomain] = useState("ramp.com");
   const [profileId, setProfileId] = useState<string>(
     SEED_PROFILE_OPTIONS[0].id,
   );
