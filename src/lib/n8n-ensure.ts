@@ -276,37 +276,47 @@ export async function ensureN8nWorkflow(
       },
     );
 
-    if (existing?.id && forceSync) {
-      const workflowId = String(existing.id);
+    // Prefer an active copy when duplicates exist (imports can leave orphans)
+    const activeExisting =
+      workflows.find((w) => w.name === WORKFLOW_NAME && w.active) || existing;
+
+    if (activeExisting?.id && forceSync) {
+      const workflowId = String(activeExisting.id);
       const got = await api.request("GET", `/rest/workflows/${workflowId}`);
       const full = ((got.data as { data?: Record<string, unknown> })?.data ||
         got.data) as Record<string, unknown>;
-      const put = await api.request("PUT", `/rest/workflows/${workflowId}`, {
-        name: exportBody.name || WORKFLOW_NAME,
-        nodes,
-        connections: exportBody.connections,
-        settings: exportBody.settings || full.settings || { executionOrder: "v1" },
-        staticData: full.staticData ?? null,
-      });
-      if (!put.res.ok) {
+      // Modern n8n accepts PATCH for full workflow replace; PUT is 404 on some builds
+      const patched = await api.request(
+        "PATCH",
+        `/rest/workflows/${workflowId}`,
+        {
+          name: exportBody.name || WORKFLOW_NAME,
+          nodes,
+          connections: exportBody.connections,
+          settings:
+            exportBody.settings || full.settings || { executionOrder: "v1" },
+          staticData: full.staticData ?? null,
+        },
+      );
+      if (!patched.res.ok) {
         return {
           ok: false,
-          error: `sync failed HTTP ${put.res.status}: ${put.text.slice(0, 200)}`,
+          error: `sync failed HTTP ${patched.res.status}: ${patched.text.slice(0, 200)}`,
         };
       }
       return activateWorkflow(workflowId, "synced_activated");
     }
 
-    if (existing?.id && existing.active && !forceSync) {
+    if (activeExisting?.id && activeExisting.active && !forceSync) {
       return {
         ok: true,
         action: "already_active",
-        workflowId: String(existing.id),
+        workflowId: String(activeExisting.id),
       };
     }
 
-    if (existing?.id) {
-      return activateWorkflow(String(existing.id), "activated");
+    if (activeExisting?.id) {
+      return activateWorkflow(String(activeExisting.id), "activated");
     }
 
     // Import from repo export
