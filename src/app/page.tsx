@@ -298,13 +298,49 @@ export default function Home() {
   /** Highest stage seen from server polls — heuristic must not override this. */
   const serverStageRef = useRef<WorkflowUiStage>("idle");
 
-  function scrollToStage(stage: AppStage) {
-    ({
+  function scrollToStage(stage: AppStage, options?: { force?: boolean }) {
+    const el = ({
       landing: landingRef,
       enter: enterRef,
       analysis: analysisRef,
       results: resultsRef,
-    })[stage].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    })[stage].current;
+    if (!el) return;
+
+    // Scroll the snap container (`main`), not just the window — scrollIntoView
+    // alone often fails or gets cancelled under CSS scroll-snap.
+    const scroller =
+      el.closest<HTMLElement>("[data-app-scroll]") ??
+      el.closest("main") ??
+      null;
+
+    const run = () => {
+      if (scroller) {
+        const top =
+          el.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop;
+        scroller.scrollTo({ top, behavior: "smooth" });
+      } else {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+
+    run();
+    // Second pass after layout (results content mount, fonts, snap settle)
+    if (options?.force) {
+      window.setTimeout(run, 80);
+      window.setTimeout(run, 280);
+    }
+  }
+
+  /** After React commits result state, scroll to Results reliably. */
+  function scrollToResultsAfterComplete() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToStage("results", { force: true });
+      });
+    });
   }
 
   useEffect(() => {
@@ -570,7 +606,7 @@ export default function Home() {
             setIsSubmitting(false);
             window.turnstile?.reset();
             setTurnstileToken("");
-            requestAnimationFrame(() => scrollToStage("results"));
+            scrollToResultsAfterComplete();
           },
           onFailed: (message) => {
             setError(message);
@@ -604,7 +640,7 @@ export default function Home() {
     setWorkflowUiStage("done");
     setAnalysisPercent(100);
     setAnalysisLabel("Sample result ready");
-    requestAnimationFrame(() => scrollToStage("results"));
+    scrollToResultsAfterComplete();
   }
 
   /** Clear form + result state and return to Enter for another run. */
@@ -625,7 +661,9 @@ export default function Home() {
     serverStageRef.current = "idle";
     window.turnstile?.reset();
     setTurnstileToken("");
-    requestAnimationFrame(() => scrollToStage("enter"));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToStage("enter", { force: true }));
+    });
   }
 
   const displayResult: DisplayResult | null = liveResult
@@ -640,7 +678,10 @@ export default function Home() {
   }));
 
   return (
-    <main className="h-screen snap-y snap-proximity overflow-y-auto scroll-smooth bg-[#09110f] text-stone-50">
+    <main
+      data-app-scroll
+      className="h-screen snap-y snap-proximity overflow-y-auto scroll-smooth bg-[#09110f] text-stone-50"
+    >
       {turnstileSiteKey ? (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
@@ -916,7 +957,21 @@ export default function Home() {
                   : displayResult
                     ? showSample
                       ? "Sample path — no Turnstile, no quota."
-                      : "Analysis complete — see Results."
+                      : (
+                          <>
+                            Analysis complete —{" "}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                scrollToStage("results", { force: true })
+                              }
+                              className="font-medium text-amber-100 underline-offset-2 hover:underline"
+                            >
+                              view results
+                            </button>
+                            .
+                          </>
+                        )
                     : "Submit a domain on the Enter stage to start."}
               </p>
             </div>
