@@ -211,35 +211,38 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
       };
     }
 
-    if (existing?.id && !existing.active) {
-      const versionId = existing.versionId as string | undefined;
+    async function activateWorkflow(workflowId: string): Promise<EnsureResult> {
+      const got = await api.request("GET", `/rest/workflows/${workflowId}`);
+      const full = ((got.data as { data?: Record<string, unknown> })?.data ||
+        got.data) as Record<string, unknown>;
+      if (full.active) {
+        return {
+          ok: true,
+          action: "already_active",
+          workflowId: String(workflowId),
+        };
+      }
       const act = await api.request(
         "POST",
-        `/rest/workflows/${existing.id}/activate`,
-        versionId ? { versionId } : {},
+        `/rest/workflows/${workflowId}/activate`,
+        full.versionId ? { versionId: full.versionId } : {},
       );
-      if (!act.res.ok) {
-        // refresh and retry with versionId from GET
-        const got = await api.request("GET", `/rest/workflows/${existing.id}`);
-        const full = ((got.data as { data?: Record<string, unknown> })?.data ||
-          got.data) as Record<string, unknown>;
-        const act2 = await api.request(
-          "POST",
-          `/rest/workflows/${existing.id}/activate`,
-          { versionId: full.versionId },
-        );
-        if (!act2.res.ok) {
-          return {
-            ok: false,
-            error: `activate failed HTTP ${act2.res.status}: ${act2.text.slice(0, 200)}`,
-          };
-        }
+      // 409 = webhook path already registered (another active copy) — treat as healthy
+      if (act.res.ok || act.res.status === 409) {
+        return {
+          ok: true,
+          action: act.res.status === 409 ? "already_active" : "activated",
+          workflowId: String(workflowId),
+        };
       }
       return {
-        ok: true,
-        action: "activated",
-        workflowId: String(existing.id),
+        ok: false,
+        error: `activate failed HTTP ${act.res.status}: ${act.text.slice(0, 200)}`,
       };
+    }
+
+    if (existing?.id) {
+      return activateWorkflow(String(existing.id));
     }
 
     // Import from repo export
@@ -277,29 +280,14 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
     const workflowId = String(createdData.id);
     const versionId = createdData.versionId as string | undefined;
 
-    const act = await api.request(
-      "POST",
-      `/rest/workflows/${workflowId}/activate`,
-      versionId ? { versionId } : {},
-    );
-    if (!act.res.ok) {
-      const got = await api.request("GET", `/rest/workflows/${workflowId}`);
-      const full = ((got.data as { data?: Record<string, unknown> })?.data ||
-        got.data) as Record<string, unknown>;
-      const act2 = await api.request(
-        "POST",
-        `/rest/workflows/${workflowId}/activate`,
-        { versionId: full.versionId },
-      );
-      if (!act2.res.ok) {
-        return {
-          ok: false,
-          error: `activate after import failed HTTP ${act2.res.status}`,
-        };
-      }
-    }
-
-    return { ok: true, action: "imported_activated", workflowId };
+    void versionId;
+    const activated = await activateWorkflow(workflowId);
+    if (!activated.ok) return activated;
+    return {
+      ok: true,
+      action: "imported_activated",
+      workflowId,
+    };
   } catch (error) {
     return {
       ok: false,
