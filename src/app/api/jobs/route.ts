@@ -130,6 +130,18 @@ export async function POST(request: NextRequest) {
 
   markJobRunning(job.id, "research", trigger.executionId);
 
+  console.info(
+    JSON.stringify({
+      event: "job_started",
+      jobId: job.id,
+      domain: company.domain,
+      profileId: profile.id,
+      mock: trigger.mock,
+      callbackUrl,
+      n8nExecutionId: trigger.executionId ?? null,
+    }),
+  );
+
   if (trigger.mock) {
     scheduleMockCompletion(job.id, profile, company.domain);
   }

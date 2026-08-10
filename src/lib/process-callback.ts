@@ -54,6 +54,15 @@ function applyCallback(job: JobRow, body: CallbackBody): ProcessCallbackResult {
       body.stage,
       body.executionId,
     );
+    console.info(
+      JSON.stringify({
+        event: "job_stage",
+        jobId: job.id,
+        domain: job.domain,
+        stage: body.stage,
+        n8nExecutionId: body.executionId ?? null,
+      }),
+    );
     return { ok: true, job: updated ?? job };
   }
 
@@ -122,13 +131,19 @@ function applyCallback(job: JobRow, body: CallbackBody): ProcessCallbackResult {
     return { ok: false, status: 409, error: result.reason };
   }
 
+  const durationMs = Date.now() - Date.parse(job.created_at.includes("T")
+    ? job.created_at
+    : job.created_at.replace(" ", "T") + "Z");
   console.info(
     JSON.stringify({
       event: recovered ? "late_callback_recovered" : "job_complete",
       jobId: job.id,
+      domain: job.domain,
       n8nExecutionId: body.executionId ?? null,
       overallScore: scored.overallScore,
       fitBand: scored.fitBand,
+      durationMs: Number.isFinite(durationMs) ? durationMs : null,
+      meta: body.meta ?? null,
     }),
   );
 
