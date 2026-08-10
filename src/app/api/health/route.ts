@@ -1,15 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { isMockN8n, n8nConfigured } from "@/lib/constants";
 import { probeDatabase } from "@/lib/db";
 import { countInflight } from "@/lib/jobs";
+import { ensureN8nWorkflow } from "@/lib/n8n-ensure";
 import { ensureSweeper } from "@/lib/sweeper";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     ensureSweeper();
     const database = probeDatabase();
+    const heal = request.nextUrl.searchParams.get("heal") === "1";
+    let n8nEnsure: Awaited<ReturnType<typeof ensureN8nWorkflow>> | null = null;
+    if (heal && !isMockN8n() && n8nConfigured()) {
+      n8nEnsure = await ensureN8nWorkflow();
+    }
     return NextResponse.json({
       ok: true,
       service: "gtm-demo",
@@ -20,6 +26,7 @@ export async function GET() {
       orchestration: {
         mockN8n: isMockN8n(),
         n8nConfigured: n8nConfigured(),
+        n8nEnsure,
       },
     });
   } catch (error) {

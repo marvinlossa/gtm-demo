@@ -2,6 +2,10 @@ import {
   isMockN8n,
   N8N_TRIGGER_TIMEOUT_MS,
 } from "@/lib/constants";
+import {
+  ensureN8nWorkflow,
+  isWebhookNotRegisteredError,
+} from "@/lib/n8n-ensure";
 import type { Profile } from "@/lib/types";
 
 export type N8nTriggerPayload = {
@@ -35,26 +39,32 @@ export function buildCallbackUrl(jobId: string) {
   return `${appCallbackBaseUrl()}/api/jobs/${jobId}/callback`;
 }
 
-/**
- * Fire n8n webhook (Respond Immediately). When MOCK_N8N=1, skip HTTP and
- * schedule a local mock completion.
- */
-export async function triggerN8nWorkflow(
+function buildTriggerBody(payload: N8nTriggerPayload, secret: string) {
+  return {
+    jobId: payload.jobId,
+    domain: payload.domain,
+    normalizedUrl: payload.normalizedUrl,
+    profileId: payload.profileId,
+    profile: payload.profile,
+    callbackUrl: payload.callbackUrl,
+    // Body secret for n8n Code-node check (header may not be forwarded into $json)
+    gtmWebhookSecret: secret,
+    attributes: payload.profile.attributes.map((a) => ({
+      id: a.id,
+      label: a.label,
+      weight: a.weight,
+      researchPrompt: a.researchPrompt.replaceAll("{domain}", payload.domain),
+      positiveSignals: a.positiveSignals,
+      negativeSignals: a.negativeSignals,
+    })),
+  };
+}
+
+async function postWebhook(
+  url: string,
+  secret: string,
   payload: N8nTriggerPayload,
 ): Promise<N8nTriggerResult> {
-  if (isMockN8n()) {
-    return { ok: true, mock: true, executionId: `mock-${payload.jobId.slice(0, 8)}` };
-  }
-
-  const url = process.env.N8N_WEBHOOK_URL?.trim();
-  const secret = process.env.GTM_WEBHOOK_SECRET?.trim();
-  if (!url) {
-    return { ok: false, error: "N8N_WEBHOOK_URL is not configured" };
-  }
-  if (!secret) {
-    return { ok: false, error: "GTM_WEBHOOK_SECRET is not configured" };
-  }
-
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -62,27 +72,7 @@ export async function triggerN8nWorkflow(
         "Content-Type": "application/json",
         "X-Gtm-Webhook-Secret": secret,
       },
-      body: JSON.stringify({
-        jobId: payload.jobId,
-        domain: payload.domain,
-        normalizedUrl: payload.normalizedUrl,
-        profileId: payload.profileId,
-        profile: payload.profile,
-        callbackUrl: payload.callbackUrl,
-        // Body secret for n8n Code-node check (header may not be forwarded into $json)
-        gtmWebhookSecret: secret,
-        attributes: payload.profile.attributes.map((a) => ({
-          id: a.id,
-          label: a.label,
-          weight: a.weight,
-          researchPrompt: a.researchPrompt.replaceAll(
-            "{domain}",
-            payload.domain,
-          ),
-          positiveSignals: a.positiveSignals,
-          negativeSignals: a.negativeSignals,
-        })),
-      }),
+      body: JSON.stringify(buildTriggerBody(payload, secret)),
       signal: AbortSignal.timeout(N8N_TRIGGER_TIMEOUT_MS),
     });
 
@@ -100,6 +90,67 @@ export async function triggerN8nWorkflow(
       error instanceof Error ? error.message : "n8n trigger failed";
     return { ok: false, error: message };
   }
+}
+
+/**
+ * Fire n8n webhook (Respond Immediately). When MOCK_N8N=1, skip HTTP and
+ * schedule a local mock completion.
+ * On webhook-not-registered (common after n8n restart), re-import/activate
+ * the workflow from the repo export and retry once.
+ */
+export async function triggerN8nWorkflow(
+  payload: N8nTriggerPayload,
+): Promise<N8nTriggerResult> {
+  if (isMockN8n()) {
+    return { ok: true, mock: true, executionId: `mock-${payload.jobId.slice(0, 8)}` };
+  }
+
+  const url = process.env.N8N_WEBHOOK_URL?.trim();
+  const secret = process.env.GTM_WEBHOOK_SECRET?.trim();
+  if (!url) {
+    return { ok: false, error: "N8N_WEBHOOK_URL is not configured" };
+  }
+  if (!secret) {
+    return { ok: false, error: "GTM_WEBHOOK_SECRET is not configured" };
+  }
+
+  const first = await postWebhook(url, secret, payload);
+  if (first.ok) return first;
+
+  if (!isWebhookNotRegisteredError(first.error)) {
+    return first;
+  }
+
+  console.warn(
+    JSON.stringify({
+      event: "n8n_webhook_missing_self_heal",
+      jobId: payload.jobId,
+      error: first.error,
+    }),
+  );
+
+  const ensured = await ensureN8nWorkflow();
+  console.info(
+    JSON.stringify({
+      event: "n8n_ensure_workflow",
+      jobId: payload.jobId,
+      ok: ensured.ok,
+      ...(ensured.ok
+        ? { action: ensured.action, workflowId: ensured.workflowId }
+        : { error: ensured.error }),
+    }),
+  );
+
+  if (!ensured.ok) {
+    return {
+      ok: false,
+      error: `${first.error} | self-heal failed: ${ensured.error}`,
+    };
+  }
+
+  // Brief pause so n8n registers the production webhook
+  await new Promise((r) => setTimeout(r, 1500));
+  return postWebhook(url, secret, payload);
 }
 
 /** Build mock findings + strategy for local demos without n8n. */

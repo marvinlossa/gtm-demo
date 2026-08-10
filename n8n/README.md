@@ -163,11 +163,12 @@ See design doc. Summary:
 ## Railway notes
 
 1. Service `n8n` from image `n8nio/n8n` (or pin `:1.103.0` / `:latest`) with **start command** `n8n` (not bare `start` — Railway may drop the image entrypoint).
-2. **Volume caution:** mounting a Railway volume over `/home/node/.n8n` often causes `EACCES` (volume root-owned, n8n runs as `node`). Prefer no volume first, or mount at `/data` with a root entrypoint that `chown`s before `exec n8n`, and set `N8N_USER_FOLDER=/data`.
-3. Private networking for app → webhook if available; public URL for the editor.
-4. Set the same secrets as above; never put Perplexity/OpenRouter keys on the app service.
-5. App `N8N_WEBHOOK_URL` = internal `http://n8n.railway.internal:.../webhook/gtm-fit-analysis` or public production webhook URL when `MOCK_N8N=0`.
-6. App public URL = `https://gtm-demo.marvinlossa.com` (plus Railway default domain).
+2. **Persistence:** use Railway **Postgres** (`DB_TYPE=postgresdb` + `DB_POSTGRESDB_*` from `${{Postgres.*}}`). Avoid binding a volume over `/home/node/.n8n` (often `EACCES` as user `node`).
+3. **App self-heal:** if the production webhook is missing, the app re-imports/activates `workflows/gtm-fit-analysis.json` via n8n REST (`N8N_BASE_URL` + basic auth + owner creds on the app). Manual: `GET /api/health?heal=1`.
+4. Private networking for app → webhook if available; public URL for the editor.
+5. Provider keys stay on **n8n only**; shared webhook/callback secrets on both.
+6. App `N8N_WEBHOOK_URL` = public or private `…/webhook/gtm-fit-analysis` when `MOCK_N8N=0`.
+7. App public URL = `https://gtm-demo.marvinlossa.com`.
 
 ## Troubleshooting
 
