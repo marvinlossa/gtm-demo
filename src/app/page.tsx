@@ -757,7 +757,7 @@ export default function Home() {
     pollAbortRef.current = null;
     sampleSimAbortRef.current?.abort();
     sampleSimAbortRef.current = null;
-    setDomain("");
+    setDomain("ramp.com");
     setError(null);
     setRateLimitModal(null);
     setLiveResult(null);
@@ -1008,7 +1008,7 @@ export default function Home() {
                   label="Company domain or URL"
                   value={domain}
                   onChange={setDomain}
-                  placeholder="e.g. acme.com"
+                  placeholder="e.g. ramp.com"
                 />
                 <SelectEdit
                   label="Ideal Customer Profile (ICP)"
