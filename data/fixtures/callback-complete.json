@@ -87,33 +87,33 @@
     }
   ],
   "strategy": {
-    "summary": "Lead with sales capacity and recent funding as proof of scale. Position a short pilot against AE productivity metrics.",
+    "summary": "Outbound plan for selling into the prospect (not advice for their leadership). Lead with public hiring + funding as timing signals. First thread: prospect VP Sales / RevOps. Position a short pilot against AE ramp or pipeline hygiene metrics the seller can measure with them.",
     "whyNow": [
-      "Hiring and funding suggest budget for tooling this cycle.",
-      "Multi-market expansion increases coordination pain."
+      "Prospect hiring and funding suggest GTM tooling budget this cycle.",
+      "Multi-market expansion at the prospect increases coordination pain sellers can attach to."
     ],
     "entryPoints": [
-      "VP Sales / CRO",
-      "RevOps lead"
+      "Prospect VP Sales / CRO",
+      "Prospect RevOps lead"
     ],
     "talkTracks": [
       {
-        "title": "Hiring velocity",
-        "script": "Teams adding AEs often struggle with ramp and handoffs — we compress that loop.",
+        "title": "Hiring velocity (seller → prospect)",
+        "script": "Saw you are adding AEs after the raise — peers in that phase often hit ramp and marketing→sales handoffs. Worth comparing how you run that loop today?",
         "tiedAttributeIds": ["growing-sales-team", "clear-sales-org"]
       }
     ],
     "discoveryQuestions": [
-      "How many AEs are you ramping this quarter?",
-      "Who owns the outbound tech stack?"
+      "Questions for the prospect contact: how many AEs is the team ramping this quarter?",
+      "At the prospect: who owns the outbound / pipeline tech stack and buying process?"
     ],
     "risksAndObjections": [
-      "May already have a preferred stack from the last raise."
+      "Prospect may already have a preferred stack funded by the last raise — validate before pitching rip-and-replace."
     ],
     "nextSteps": [
-      "Book a 20-minute discovery with RevOps",
-      "Share two peer case studies",
-      "Propose a 30-day pilot"
+      "Book a 20-minute discovery with prospect RevOps (seller calendars it)",
+      "Share two peer case studies relevant to the prospect’s motion",
+      "Propose a 30-day pilot the prospect can accept on one pod"
     ]
   },
   "meta": {

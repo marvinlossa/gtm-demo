@@ -93,51 +93,70 @@ type DisplayResult = {
   mock?: boolean;
 };
 
-/** Client-only sample so recruiters can see results without burning quota. */
+/**
+ * Client-only sample so recruiters can see layout without burning quota.
+ * Always framed seller → prospect (reader analyzes a potential client).
+ */
 const SAMPLE_RESULT: DisplayResult = {
-  domain: "example.com",
+  domain: "northwind-analytics.com",
   profileLabel: "Sales Expansion",
-  overallScore: 72,
+  overallScore: 74,
   fitBand: "Moderate fit",
   attributes: [
     {
       id: "growing-sales-team",
       label: "Growing sales team",
-      score: 78,
+      score: 82,
       present: "true",
-      confidence: 0.7,
-      evidence: "Public careers page lists multiple AE/SDR openings.",
+      confidence: 0.8,
+      evidence:
+        "Careers lists AE + SDR openings in US and EMEA; blog notes GTM headcount growth after the raise (illustrative sample).",
     },
     {
       id: "recent-funding",
       label: "Recent funding",
-      score: 85,
+      score: 88,
       present: "true",
-      confidence: 0.8,
-      evidence: "Series B announced within the last 18 months.",
+      confidence: 0.85,
+      evidence:
+        "Press room cites a Series B led by a growth fund to scale go-to-market (illustrative sample).",
     },
     {
       id: "b2b-offering",
       label: "B2B offering",
-      score: 90,
+      score: 91,
       present: "true",
       confidence: 0.9,
-      evidence: "Pricing and case studies aimed at business buyers.",
+      evidence:
+        "Team/enterprise pricing and case studies aimed at mid-market analytics buyers (illustrative sample).",
+    },
+    {
+      id: "clear-sales-org",
+      label: "Clear sales organization",
+      score: 68,
+      present: "true",
+      confidence: 0.7,
+      evidence:
+        "Leadership page lists a VP of Sales; enterprise page describes AE-led evaluation (illustrative sample).",
     },
   ],
   strategy: {
     summary:
-      "Lead with efficiency gains for an expanding sales org. Reference recent growth signals and offer a short pilot tied to a live pipeline metric.",
+      "Outbound plan for selling into Northwind Analytics (prospect), not running their company. Moderate Sales Expansion fit: public hiring + funding suggest GTM capacity pressure. First thread: prospect RevOps or VP Sales. Open on AE ramp / handoff friction; propose a 30-day pilot on one pod with a single pipeline or ramp metric.",
     talkTracks: [
-      "Congrats on the expansion hiring — teams in that phase usually need cleaner handoffs between marketing and AE capacity.",
-      "Your B2B motion suggests multi-threaded evaluation; equip champions with a one-page ROI brief.",
+      "Cold email / call open: “Saw Northwind posting AEs after the Series B — teams in that phase often hit marketing→sales handoff friction. Worth a 15-minute compare against what peers do on ramp?”",
+      "Discovery bridge: “If multi-threaded deals are common for your analytics buyers, champions usually need a one-page ROI brief. Happy to leave one tailored to Northwind’s motion.”",
     ],
     nextSteps: [
-      "Map AE/SDR org chart and open roles",
-      "Propose a 30-day pilot with one team",
-      "Share two peer case studies in adjacent markets",
+      "Map public AE/SDR openings and 2–3 prospect stakeholders (VP Sales, RevOps, CRO)",
+      "Draft a 3-touch outbound sequence to those titles — seller voice, not an internal memo to Northwind",
+      "Offer a 30-day pilot scoped to one Northwind sales pod with one success metric",
     ],
   },
+  limitations: [
+    "Illustrative sample only — not live research.",
+    "Public-web estimate style; not investment or legal advice.",
+  ],
 };
 
 type JobPollResponse = {
@@ -1014,12 +1033,23 @@ export default function Home() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {showSample ? (
+                      <Pill tone="stone">Illustrative sample</Pill>
+                    ) : null}
                     {displayResult.fitBand === "Insufficient data" ? (
                       <Pill tone="amber">Limited evidence</Pill>
                     ) : null}
                     <Pill tone="amber">{displayResult.profileLabel}</Pill>
                   </div>
                 </div>
+                {showSample ? (
+                  <p className="mt-4 text-sm leading-6 text-stone-400">
+                    Dummy layout preview for Northwind Analytics — not a live
+                    research run. Run Analyze for real Perplexity + strategy
+                    output. Strategy is always seller → prospect (you are
+                    evaluating a potential client).
+                  </p>
+                ) : null}
                 {displayResult.fitBand === "Insufficient data" ? (
                   <p className="mt-4 text-sm leading-6 text-amber-100/90">
                     Limited public evidence — score is not a reliable fit
@@ -1037,7 +1067,7 @@ export default function Home() {
                 >
                   View sample result
                 </button>{" "}
-                to preview the layout.
+                to preview the layout (illustrative dummy data).
               </div>
             )}
           </div>

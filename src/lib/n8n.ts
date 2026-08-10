@@ -184,19 +184,19 @@ export function buildMockCallbackBody(profile: Profile, domain: string) {
     executionId: `mock-exec-${Date.now()}`,
     findings,
     strategy: {
-      summary: `Mock strategy for ${domain} under profile “${profile.name}”. Replace MOCK_N8N=0 and point at n8n for live research.`,
+      summary: `Mock outbound plan for selling into prospect ${domain} under ICP “${profile.name}”. The reader is the seller — not an employee of ${domain}.`,
       whyNow: [
-        "Mock: expansion signals suggest a timely outreach window.",
-        "Mock: public GTM pages indicate active buyer evaluation.",
+        "Mock: public signals suggest a timely window to approach this prospect.",
+        "Mock: GTM-facing pages imply active evaluation of tools/process.",
       ],
       entryPoints: [
-        "Ops / RevOps stakeholder",
-        "Sales leadership if AE hiring is visible",
+        "Prospect RevOps / sales ops if hiring or process language is visible",
+        "Prospect sales leadership (VP Sales / CRO) when AE/SDR growth appears",
       ],
       talkTracks: [
         {
-          title: "Efficiency for growing teams",
-          script: `For teams like ${domain}, lead with a concrete workflow win tied to the strongest attribute scores.`,
+          title: "Seller script — capacity after growth",
+          script: `When speaking with stakeholders at ${domain}, open with a hypothesis about ramp or handoff pain, then ask for confirmation — do not speak as if you run their company.`,
           tiedAttributeIds: findings
             .filter((f) => f.present === "true")
             .slice(0, 2)
@@ -204,16 +204,16 @@ export function buildMockCallbackBody(profile: Profile, domain: string) {
         },
       ],
       discoveryQuestions: [
-        "Who owns pipeline tooling decisions today?",
-        "What changed in the last two quarters that made this a priority?",
+        "At the prospect: who owns pipeline tooling and sales process decisions?",
+        "What changed in their GTM in the last two quarters that might create urgency?",
       ],
       risksAndObjections: [
-        "Limited public data may overstate fit — validate with discovery.",
+        "Public data may overstate fit — validate on a discovery call with the prospect.",
       ],
       nextSteps: [
-        "Confirm ICP attributes on a discovery call",
-        "Share a one-page ROI brief",
-        "Propose a short pilot",
+        "Identify 2–3 prospect stakeholders from public pages",
+        "Draft outbound messaging for the seller (not internal memo to the prospect)",
+        "Propose a narrow pilot the prospect can accept",
       ],
     },
     meta: {

@@ -10,8 +10,21 @@ import path from "node:path";
 const WORKFLOW_NAME = "gtm-fit-analysis";
 
 type EnsureResult =
-  | { ok: true; action: "already_active" | "activated" | "imported_activated"; workflowId: string }
+  | {
+      ok: true;
+      action:
+        | "already_active"
+        | "activated"
+        | "imported_activated"
+        | "synced_activated";
+      workflowId: string;
+    }
   | { ok: false; error: string };
+
+export type EnsureOptions = {
+  /** When true, PUT the repo export over any existing workflow (prompt updates). */
+  forceSync?: boolean;
+};
 
 function n8nBaseUrl() {
   return (
@@ -173,8 +186,12 @@ function asList(data: unknown): Array<Record<string, unknown>> {
 /**
  * Ensure production webhook for gtm-fit-analysis is registered.
  * Safe to call on trigger failure (404) or from a health endpoint.
+ * Pass forceSync to overwrite an existing workflow with the repo export (prompt updates).
  */
-export async function ensureN8nWorkflow(): Promise<EnsureResult> {
+export async function ensureN8nWorkflow(
+  options: EnsureOptions = {},
+): Promise<EnsureResult> {
+  const forceSync = Boolean(options.forceSync);
   const base = n8nBaseUrl();
   const basic = basicAuthHeader();
   if (!base) return { ok: false, error: "N8N_BASE_URL not configured" };
@@ -203,35 +220,37 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
     );
     const existing = workflows.find((w) => w.name === WORKFLOW_NAME);
 
-    if (existing?.id && existing.active) {
-      return {
-        ok: true,
-        action: "already_active",
-        workflowId: String(existing.id),
-      };
-    }
-
-    async function activateWorkflow(workflowId: string): Promise<EnsureResult> {
+    async function activateWorkflow(
+      workflowId: string,
+      actionOnSuccess:
+        | "activated"
+        | "synced_activated"
+        | "imported_activated" = "activated",
+    ): Promise<EnsureResult> {
       const got = await api.request("GET", `/rest/workflows/${workflowId}`);
       const full = ((got.data as { data?: Record<string, unknown> })?.data ||
         got.data) as Record<string, unknown>;
+      // Deactivate then activate so webhook + code nodes pick up updates after sync
       if (full.active) {
-        return {
-          ok: true,
-          action: "already_active",
-          workflowId: String(workflowId),
-        };
+        await api.request(
+          "POST",
+          `/rest/workflows/${workflowId}/deactivate`,
+          full.versionId ? { versionId: full.versionId } : {},
+        );
       }
+      const got2 = await api.request("GET", `/rest/workflows/${workflowId}`);
+      const full2 = ((got2.data as { data?: Record<string, unknown> })?.data ||
+        got2.data) as Record<string, unknown>;
       const act = await api.request(
         "POST",
         `/rest/workflows/${workflowId}/activate`,
-        full.versionId ? { versionId: full.versionId } : {},
+        full2.versionId ? { versionId: full2.versionId } : {},
       );
       // 409 = webhook path already registered (another active copy) — treat as healthy
       if (act.res.ok || act.res.status === 409) {
         return {
           ok: true,
-          action: act.res.status === 409 ? "already_active" : "activated",
+          action: act.res.status === 409 ? "already_active" : actionOnSuccess,
           workflowId: String(workflowId),
         };
       }
@@ -241,11 +260,6 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
       };
     }
 
-    if (existing?.id) {
-      return activateWorkflow(String(existing.id));
-    }
-
-    // Import from repo export
     const exportBody = loadWorkflowExport();
     if (!exportBody) {
       return {
@@ -254,7 +268,6 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
       };
     }
 
-    // Strip runtime-only fields from nodes
     const nodes = (exportBody.nodes as Array<Record<string, unknown>>).map(
       (n) => {
         const copy = { ...n };
@@ -263,6 +276,40 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
       },
     );
 
+    if (existing?.id && forceSync) {
+      const workflowId = String(existing.id);
+      const got = await api.request("GET", `/rest/workflows/${workflowId}`);
+      const full = ((got.data as { data?: Record<string, unknown> })?.data ||
+        got.data) as Record<string, unknown>;
+      const put = await api.request("PUT", `/rest/workflows/${workflowId}`, {
+        name: exportBody.name || WORKFLOW_NAME,
+        nodes,
+        connections: exportBody.connections,
+        settings: exportBody.settings || full.settings || { executionOrder: "v1" },
+        staticData: full.staticData ?? null,
+      });
+      if (!put.res.ok) {
+        return {
+          ok: false,
+          error: `sync failed HTTP ${put.res.status}: ${put.text.slice(0, 200)}`,
+        };
+      }
+      return activateWorkflow(workflowId, "synced_activated");
+    }
+
+    if (existing?.id && existing.active && !forceSync) {
+      return {
+        ok: true,
+        action: "already_active",
+        workflowId: String(existing.id),
+      };
+    }
+
+    if (existing?.id) {
+      return activateWorkflow(String(existing.id), "activated");
+    }
+
+    // Import from repo export
     const created = await api.request("POST", "/rest/workflows", {
       name: exportBody.name || WORKFLOW_NAME,
       nodes,
@@ -278,10 +325,7 @@ export async function ensureN8nWorkflow(): Promise<EnsureResult> {
     const createdData = ((created.data as { data?: Record<string, unknown> })
       ?.data || created.data) as Record<string, unknown>;
     const workflowId = String(createdData.id);
-    const versionId = createdData.versionId as string | undefined;
-
-    void versionId;
-    const activated = await activateWorkflow(workflowId);
+    const activated = await activateWorkflow(workflowId, "imported_activated");
     if (!activated.ok) return activated;
     return {
       ok: true,

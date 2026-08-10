@@ -12,9 +12,10 @@ export async function GET(request: NextRequest) {
     ensureSweeper();
     const database = probeDatabase();
     const heal = request.nextUrl.searchParams.get("heal") === "1";
+    const forceSync = request.nextUrl.searchParams.get("syncWorkflow") === "1";
     let n8nEnsure: Awaited<ReturnType<typeof ensureN8nWorkflow>> | null = null;
-    if (heal && !isMockN8n() && n8nConfigured()) {
-      n8nEnsure = await ensureN8nWorkflow();
+    if ((heal || forceSync) && !isMockN8n() && n8nConfigured()) {
+      n8nEnsure = await ensureN8nWorkflow({ forceSync });
     }
     return NextResponse.json({
       ok: true,
