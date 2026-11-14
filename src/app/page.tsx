@@ -1104,7 +1104,7 @@ export default function Home() {
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-500">
                   Powered by
                 </span>
-                <Pill tone="stone">n8n</Pill>
+                <Pill tone="stone">Python</Pill>
                 <Pill tone="stone">Perplexity</Pill>
                 <Pill tone="stone">OpenRouter</Pill>
               </div>

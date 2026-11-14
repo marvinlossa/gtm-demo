@@ -7,7 +7,7 @@ import {
   MAX_INFLIGHT_JOBS,
   SCORING_VERSION,
 } from "@/lib/constants";
-import { getDb } from "@/lib/db";
+import { withDb } from "@/lib/db";
 import type {
   JobStatus,
   SalesStrategy,
@@ -52,7 +52,8 @@ function addMsIso(ms: number) {
   return new Date(Date.now() + ms).toISOString();
 }
 
-export function countInflight(db: Database.Database = getDb()) {
+export function countInflight(db?: Database.Database): number {
+  if (!db) return withDb((inner) => countInflight(inner));
   const row = db
     .prepare(
       `SELECT COUNT(*) AS c FROM jobs WHERE status IN ('pending','running')`,
@@ -61,7 +62,8 @@ export function countInflight(db: Database.Database = getDb()) {
   return row.c;
 }
 
-export function hasCapacity(db: Database.Database = getDb()) {
+export function hasCapacity(db?: Database.Database): boolean {
+  if (!db) return withDb((inner) => hasCapacity(inner));
   return countInflight(db) < MAX_INFLIGHT_JOBS;
 }
 
@@ -71,7 +73,18 @@ export function createJob(input: {
   profileId: string;
   clientIp: string;
 }): JobRow {
-  const db = getDb();
+  return withDb((db) => createJobWith(db, input));
+}
+
+function createJobWith(
+  db: Database.Database,
+  input: {
+    domain: string;
+    normalizedUrl: string;
+    profileId: string;
+    clientIp: string;
+  },
+): JobRow {
   const id = randomUUID();
   const created = nowIso();
   const expires = addMsIso(JOB_RETENTION_MS);
@@ -93,13 +106,11 @@ export function createJob(input: {
     updated_at: created,
     expires_at: expires,
   });
-  return getJob(id)!;
+  return getJob(id, db)!;
 }
 
-export function getJob(
-  id: string,
-  db: Database.Database = getDb(),
-): JobRow | null {
+export function getJob(id: string, db?: Database.Database): JobRow | null {
+  if (!db) return withDb((inner) => getJob(id, inner));
   const row = db.prepare(`SELECT * FROM jobs WHERE id = ?`).get(id) as
     | JobRow
     | undefined;
@@ -108,8 +119,9 @@ export function getJob(
 
 export function getJobResult(
   jobId: string,
-  db: Database.Database = getDb(),
+  db?: Database.Database,
 ): JobResultRow | null {
+  if (!db) return withDb((inner) => getJobResult(jobId, inner));
   const row = db
     .prepare(`SELECT * FROM job_results WHERE job_id = ?`)
     .get(jobId) as JobResultRow | undefined;
@@ -121,7 +133,7 @@ export function markJobRunning(
   stage: string = "research",
   executionId?: string,
 ) {
-  const db = getDb();
+  return withDb((db) => {
   db.prepare(
     `UPDATE jobs SET
       status = 'running',
@@ -135,7 +147,8 @@ export function markJobRunning(
     executionId: executionId ?? null,
     updated: nowIso(),
   });
-  return getJob(id);
+  return getJob(id, db);
+  });
 }
 
 export function markJobFailed(
@@ -143,7 +156,7 @@ export function markJobFailed(
   error: string,
   options?: { onlyIfStatuses?: JobStatus[] },
 ) {
-  const db = getDb();
+  return withDb((db) => {
   const allowed = options?.onlyIfStatuses ?? ["pending", "running"];
   const placeholders = allowed.map(() => "?").join(",");
   db.prepare(
@@ -154,7 +167,8 @@ export function markJobFailed(
       completed_at = ?
      WHERE id = ? AND status IN (${placeholders})`,
   ).run(error, nowIso(), nowIso(), id, ...allowed);
-  return getJob(id);
+  return getJob(id, db);
+  });
 }
 
 export function updateJobStage(
@@ -162,7 +176,7 @@ export function updateJobStage(
   stage: string,
   executionId?: string,
 ) {
-  const db = getDb();
+  return withDb((db) => {
   db.prepare(
     `UPDATE jobs SET
       stage = @stage,
@@ -175,7 +189,8 @@ export function updateJobStage(
     executionId: executionId ?? null,
     updated: nowIso(),
   });
-  return getJob(id);
+  return getJob(id, db);
+  });
 }
 
 export function completeJob(input: {
@@ -187,7 +202,20 @@ export function completeJob(input: {
   /** Allow upgrade from failed JOB_TIMEOUT */
   allowTimeoutRecovery?: boolean;
 }): { ok: true; job: JobRow } | { ok: false; reason: string } {
-  const db = getDb();
+  return withDb((db) => completeJobWith(db, input));
+}
+
+function completeJobWith(
+  db: Database.Database,
+  input: {
+    id: string;
+    scored: ScoredResult;
+    strategy: SalesStrategy;
+    executionId?: string;
+    meta?: Record<string, unknown>;
+    allowTimeoutRecovery?: boolean;
+  },
+): { ok: true; job: JobRow } | { ok: false; reason: string } {
   const job = getJob(input.id, db);
   if (!job) return { ok: false, reason: "not_found" };
 
@@ -261,7 +289,7 @@ export function completeJob(input: {
   });
 
   tx();
-  return { ok: true, job: getJob(input.id)! };
+  return { ok: true, job: getJob(input.id, db)! };
 }
 
 /** Parse SQLite datetime as UTC ms (handles ISO and SQLite datetime('now')). */
@@ -286,7 +314,7 @@ export function expireIfNeeded(jobId: string): JobRow | null {
 }
 
 export function sweepTimedOutJobs() {
-  const db = getDb();
+  return withDb((db) => {
   const rows = db
     .prepare(
       `SELECT id, created_at FROM jobs WHERE status IN ('pending','running')`,
@@ -300,15 +328,17 @@ export function sweepTimedOutJobs() {
     }
   }
   return n;
+  });
 }
 
 export function sweepExpiredJobs() {
-  const db = getDb();
+  return withDb((db) => {
   const now = nowIso();
   const result = db
     .prepare(`DELETE FROM jobs WHERE expires_at < ?`)
     .run(now);
   return result.changes;
+  });
 }
 
 export function toPublicJob(job: JobRow, result?: JobResultRow | null) {

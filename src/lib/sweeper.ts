@@ -1,7 +1,6 @@
 import { sweepExpiredJobs, sweepTimedOutJobs } from "@/lib/jobs";
 
-let interval: ReturnType<typeof setInterval> | null = null;
-
+/** Drop timed-out and expired jobs. Called from read/write paths, not a timer. */
 export function runSweepOnce() {
   const timedOut = sweepTimedOutJobs();
   const expired = sweepExpiredJobs();
@@ -16,20 +15,4 @@ export function runSweepOnce() {
     );
   }
   return { timedOut, expired };
-}
-
-/** Start process-level sweeper (single replica). Idempotent. */
-export function ensureSweeper() {
-  if (interval || process.env.DISABLE_JOB_SWEEPER === "1") return;
-  interval = setInterval(() => {
-    try {
-      runSweepOnce();
-    } catch (error) {
-      console.error("[gtm-demo] sweeper error", error);
-    }
-  }, 30_000);
-  // Don't keep the process alive solely for the timer in some environments.
-  if (typeof interval === "object" && interval && "unref" in interval) {
-    interval.unref();
-  }
 }

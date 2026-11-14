@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp, isAllowlisted } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { withDb } from "@/lib/db";
 import { getJob, getJobResult, toPublicJob } from "@/lib/jobs";
+import { runSweepOnce } from "@/lib/sweeper";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
     ? Math.min(Math.max(limitRaw, 1), 100)
     : 20;
 
+  runSweepOnce();
+
   if (id) {
     const job = getJob(id);
     if (!job) {
@@ -38,9 +41,9 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const db = getDb();
-  const rows = domain
-    ? (db
+  const rows = withDb((db) => {
+    if (domain) {
+      return db
         .prepare(
           `SELECT id, domain, profile_id, status, stage, error,
                   n8n_execution_id, created_at, updated_at, completed_at
@@ -49,16 +52,18 @@ export async function GET(request: NextRequest) {
            ORDER BY created_at DESC
            LIMIT ?`,
         )
-        .all(`%${domain}%`, limit) as Array<Record<string, unknown>>)
-    : (db
-        .prepare(
-          `SELECT id, domain, profile_id, status, stage, error,
-                  n8n_execution_id, created_at, updated_at, completed_at
-           FROM jobs
-           ORDER BY created_at DESC
-           LIMIT ?`,
-        )
-        .all(limit) as Array<Record<string, unknown>>);
+        .all(`%${domain}%`, limit) as Array<Record<string, unknown>>;
+    }
+    return db
+      .prepare(
+        `SELECT id, domain, profile_id, status, stage, error,
+                n8n_execution_id, created_at, updated_at, completed_at
+         FROM jobs
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<Record<string, unknown>>;
+  });
 
   return NextResponse.json({
     count: rows.length,

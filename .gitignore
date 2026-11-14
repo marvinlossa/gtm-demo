@@ -21,6 +21,7 @@
 /build
 
 # misc
+__pycache__/
 .DS_Store
 *.pem
 /.data/

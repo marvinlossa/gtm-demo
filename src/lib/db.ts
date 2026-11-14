@@ -6,6 +6,7 @@ import { seedProfiles } from "@/lib/profiles";
 export const runtimeHint = "nodejs" as const;
 
 let dbSingleton: Database.Database | null = null;
+let ambient: Database.Database | null = null;
 let profilesSeeded = false;
 
 /** Resolve SQLite path: Railway volume, local .data, or :memory: for tests. */
@@ -135,13 +136,33 @@ function openDatabase(filePath: string, readonly = false) {
 }
 
 /**
- * Process-wide SQLite singleton. Node runtime only (not Edge).
- * Single Railway replica assumed for MVP.
+ * Open SQLite for one request or job step and close it afterwards.
+ * Nested calls reuse the connection that is already open. Tests that
+ * called resetDb() keep that connection for the whole test.
  */
+export function withDb<T>(fn: (db: Database.Database) => T): T {
+  if (dbSingleton) return fn(dbSingleton);
+  if (ambient) return fn(ambient);
+  const db = openDatabase(resolveDatabasePath());
+  try {
+    db.pragma("busy_timeout = 5000");
+  } catch {
+    /* ignore */
+  }
+  ambient = db;
+  try {
+    return fn(db);
+  } finally {
+    ambient = null;
+    db.close();
+  }
+}
+
+/** The connection opened by withDb() or resetDb(). */
 export function getDb() {
   if (dbSingleton) return dbSingleton;
-  dbSingleton = openDatabase(resolveDatabasePath());
-  return dbSingleton;
+  if (ambient) return ambient;
+  throw new Error("SQLite is not open. Call withDb() for this request.");
 }
 
 /** Close and reopen at an explicit path (tests). */
@@ -163,8 +184,11 @@ export function closeDb() {
 
 /** Health probe: open DB, ensure profiles seeded, run trivial query. */
 export function probeDatabase() {
+  return withDb((db) => probeDatabaseWith(db));
+}
+
+function probeDatabaseWith(db: Database.Database) {
   const filePath = resolveDatabasePath();
-  const db = getDb();
   const row = db.prepare("SELECT 1 AS ok").get() as { ok: number };
   const profileCount = (
     db.prepare("SELECT COUNT(*) AS c FROM profiles").get() as { c: number }

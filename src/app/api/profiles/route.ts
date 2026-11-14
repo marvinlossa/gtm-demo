@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { withDb } from "@/lib/db";
 import { listProfiles, toProfileSummary } from "@/lib/profiles";
+import { runSweepOnce } from "@/lib/sweeper";
 
 export const runtime = "nodejs";
 
 /** List ICP profiles (summaries; research prompts stay server-side). */
 export async function GET() {
   try {
-    const db = getDb();
-    const profiles = listProfiles(db).map(toProfileSummary);
+    const profiles = withDb((db) => {
+      runSweepOnce();
+      return listProfiles(db).map(toProfileSummary);
+    });
     return NextResponse.json({ profiles });
   } catch (error) {
     const message =

@@ -83,7 +83,7 @@ export function WorkflowPanel({
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-stone-300">
             Automation
           </p>
-          <Pill tone="stone">n8n</Pill>
+          <Pill tone="stone">Python</Pill>
         </div>
         <Pill
           tone={

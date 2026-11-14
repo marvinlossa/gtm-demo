@@ -1,27 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { gateIntake, getClientIp } from "@/lib/auth";
 import {
-  JOB_ERROR_N8N_TRIGGER,
+  isMockN8n,
   MAX_INFLIGHT_JOBS,
   POLL_AFTER_MS,
 } from "@/lib/constants";
-import { getDb } from "@/lib/db";
-import {
-  createJob,
-  hasCapacity,
-  markJobFailed,
-  markJobRunning,
-} from "@/lib/jobs";
+import { getDb, withDb } from "@/lib/db";
+import { createJob, hasCapacity, markJobRunning } from "@/lib/jobs";
 import { scheduleMockCompletion } from "@/lib/mock-complete";
-import { buildCallbackUrl, triggerN8nWorkflow } from "@/lib/n8n";
 import { getProfile } from "@/lib/profiles";
-import { ensureSweeper } from "@/lib/sweeper";
+import { startAnalysis } from "@/lib/run-analysis";
+import { runSweepOnce } from "@/lib/sweeper";
 import { parseCompanyInput } from "@/lib/url";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  ensureSweeper();
   const ip = getClientIp(request);
   const body = (await request.json().catch(() => ({}))) as {
     domain?: unknown;
@@ -56,14 +50,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const profile = getProfile(getDb(), profileId);
-  if (!profile) {
-    return NextResponse.json(
-      { error: "Unknown profile." },
-      { status: 400 },
-    );
-  }
-
   const gate = await gateIntake({ ip, turnstileToken: token });
   if (!gate.ok) {
     return NextResponse.json(
@@ -81,7 +67,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!hasCapacity()) {
+  const started = withDb(() => {
+    runSweepOnce();
+    const profile = getProfile(getDb(), profileId);
+    if (!profile) return { error: "unknown" as const };
+    if (!hasCapacity()) return { error: "capacity" as const };
+    const job = createJob({
+      domain: company.domain,
+      normalizedUrl: company.normalizedUrl,
+      profileId: profile.id,
+      clientIp: ip,
+    });
+    const mock = isMockN8n();
+    const executionId = mock
+      ? `mock-${job.id.slice(0, 8)}`
+      : `py-${job.id.slice(0, 8)}`;
+    markJobRunning(job.id, "research", executionId);
+    return { error: null, job, profile, mock, executionId };
+  });
+
+  if (started.error === "unknown") {
+    return NextResponse.json({ error: "Unknown profile." }, { status: 400 });
+  }
+  if (started.error === "capacity") {
     return NextResponse.json(
       {
         error: "Server is at capacity. Try again in a few minutes.",
@@ -91,44 +99,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const job = createJob({
-    domain: company.domain,
-    normalizedUrl: company.normalizedUrl,
-    profileId: profile.id,
-    clientIp: ip,
-  });
-
-  const callbackUrl = buildCallbackUrl(job.id);
-  const trigger = await triggerN8nWorkflow({
-    jobId: job.id,
-    domain: company.domain,
-    normalizedUrl: company.normalizedUrl,
-    profileId: profile.id,
-    profile,
-    callbackUrl,
-  });
-
-  if (!trigger.ok) {
-    markJobFailed(job.id, JOB_ERROR_N8N_TRIGGER);
-    console.error(
-      JSON.stringify({
-        event: "n8n_trigger_failed",
-        jobId: job.id,
-        error: trigger.error,
-      }),
-    );
-    return NextResponse.json(
-      {
-        error: "Unable to start analysis workflow.",
-        code: JOB_ERROR_N8N_TRIGGER,
-        jobId: job.id,
-        status: "failed",
-      },
-      { status: 502 },
-    );
-  }
-
-  markJobRunning(job.id, "research", trigger.executionId);
+  const { job, profile, mock, executionId } = started;
 
   console.info(
     JSON.stringify({
@@ -136,14 +107,33 @@ export async function POST(request: NextRequest) {
       jobId: job.id,
       domain: company.domain,
       profileId: profile.id,
-      mock: trigger.mock,
-      callbackUrl,
-      n8nExecutionId: trigger.executionId ?? null,
+      mock,
+      n8nExecutionId: executionId,
     }),
   );
 
-  if (trigger.mock) {
+  if (mock) {
     scheduleMockCompletion(job.id, profile, company.domain);
+  } else {
+    after(async () => {
+      try {
+        await startAnalysis({
+          jobId: job.id,
+          domain: company.domain,
+          normalizedUrl: company.normalizedUrl,
+          profile,
+          executionId,
+        });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: "analysis_spawn_error",
+            jobId: job.id,
+            error: error instanceof Error ? error.message : "start failed",
+          }),
+        );
+      }
+    });
   }
 
   return NextResponse.json(
@@ -154,7 +144,7 @@ export async function POST(request: NextRequest) {
       pollAfterMs: POLL_AFTER_MS,
       domain: company.domain,
       profileId: profile.id,
-      mock: trigger.mock,
+      mock,
     },
     { status: 201 },
   );

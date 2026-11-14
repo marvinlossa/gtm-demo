@@ -10,7 +10,7 @@ import {
   type JobRow,
 } from "@/lib/jobs";
 import { getProfile } from "@/lib/profiles";
-import { getDb } from "@/lib/db";
+import { getDb, withDb } from "@/lib/db";
 import { scoreFindings } from "@/lib/scoring";
 import type { SalesStrategy } from "@/lib/types";
 import { parseCallbackBody, type CallbackBody } from "@/lib/validate";
@@ -20,6 +20,13 @@ export type ProcessCallbackResult =
   | { ok: false; status: number; error: string };
 
 export function processCallback(
+  jobId: string,
+  rawBody: unknown,
+): ProcessCallbackResult {
+  return withDb(() => processCallbackOpen(jobId, rawBody));
+}
+
+function processCallbackOpen(
   jobId: string,
   rawBody: unknown,
 ): ProcessCallbackResult {

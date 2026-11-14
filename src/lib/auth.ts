@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { getDb } from "@/lib/db";
+import type Database from "better-sqlite3";
+import { getDb, withDb } from "@/lib/db";
 
 const TURNSTILE_VERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -70,7 +71,15 @@ export function checkKeyedRateLimit(
   limit: number,
   windowMs: number,
 ): RateLimitResult {
-  const db = getDb();
+  return withDb((db) => checkKeyedRateLimitWith(db, key, limit, windowMs));
+}
+
+function checkKeyedRateLimitWith(
+  db: Database.Database,
+  key: string,
+  limit: number,
+  windowMs: number,
+): RateLimitResult {
   const now = Date.now();
 
   // Do not wipe far-future lifetime keys.
@@ -140,7 +149,10 @@ function writeKeyedCount(key: string, count: number, resetAt: number) {
  * Increments both only when the request is allowed (avoids burning lifetime on a daily block).
  */
 export function checkIntakeLimits(ip: string): RateLimitResult {
-  const db = getDb();
+  return withDb((db) => checkIntakeLimitsWith(db, ip));
+}
+
+function checkIntakeLimitsWith(db: Database.Database, ip: string): RateLimitResult {
   const now = Date.now();
   const dailyLimit = getDailyLimit();
   const lifetimeLimit = getLifetimeLimit();

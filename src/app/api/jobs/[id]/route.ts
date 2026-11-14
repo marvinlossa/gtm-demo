@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPollRateLimit, getClientIp } from "@/lib/auth";
 import { expireIfNeeded, getJobResult, toPublicJob } from "@/lib/jobs";
-import { ensureSweeper } from "@/lib/sweeper";
+import { runSweepOnce } from "@/lib/sweeper";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  ensureSweeper();
+  runSweepOnce();
   const { id } = await context.params;
   if (!id || id.length < 8) {
     return NextResponse.json({ error: "Invalid job id." }, { status: 400 });
