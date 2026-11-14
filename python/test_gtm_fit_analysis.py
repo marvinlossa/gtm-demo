@@ -128,6 +128,50 @@ def test_strategy_json_parse():
     assert events[-1]["body"]["error"] == "STRATEGY_JSON_PARSE"
 
 
+def test_research_text_with_citations_and_fences():
+    prose = """
+Research notes before the object.
+```json
+{"findings":[{"attributeId":"hiring","present":"unknown","confidence":0.4,"scoreHint":40,"evidence":[{"snippet":"Hiring AEs"}]}]}
+```
+Citation: see {the company blog} and [1].
+"""
+    parsed = job.parse_json_object(prose)
+    assert isinstance(parsed, dict)
+    assert parsed["findings"][0]["attributeId"] == "hiring"
+
+    trailing = (
+        '{"findings":[{"attributeId":"hiring","present":true,"confidence":0.5,"scoreHint":70,"evidence":[]}]}'
+        '\nSources: {"url":"https://example.com","title":"Blog"}'
+    )
+    parsed = job.parse_json_object(trailing)
+    assert parsed["findings"][0]["attributeId"] == "hiring"
+
+    envelope = {
+        "output": [
+            {
+                "type": "search_results",
+                "content": [{"type": "text", "text": "Snippet with {braces} that is not findings."}],
+            },
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": '{"findings":[{"attributeId":"hiring","present":"true"}]}',
+                        "annotations": [
+                            {"type": "citation", "url": "https://example.com", "start_index": 0, "end_index": 4}
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
+    text = job.extract_text(envelope)
+    assert "Snippet" not in text
+    assert job.parse_json_object(text)["findings"][0]["attributeId"] == "hiring"
+
+
 def test_agent_envelope_and_js_numbers():
     text = job.extract_text(
         {
@@ -162,5 +206,6 @@ if __name__ == "__main__":
     test_research_parse_and_prompt_shape()
     test_strategy_error_codes()
     test_strategy_json_parse()
+    test_research_text_with_citations_and_fences()
     test_agent_envelope_and_js_numbers()
     print("gtm fit analysis checks passed")

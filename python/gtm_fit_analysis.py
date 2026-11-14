@@ -62,7 +62,43 @@ def strip_fences(text: str) -> str:
     return (match.group(1) if match else stripped).strip()
 
 
+def _piece_text(item) -> str:
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return ""
+    for key in ("text", "output_text"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _block_text(block) -> str:
+    if isinstance(block, str):
+        return block
+    if not isinstance(block, dict):
+        return ""
+    content = block.get("content")
+    parts: list[str] = []
+    if isinstance(content, str):
+        parts.append(content)
+    elif isinstance(content, list):
+        for item in content:
+            piece = _piece_text(item)
+            if piece:
+                parts.append(piece)
+    if parts:
+        return "\n".join(parts)
+    return _piece_text(block)
+
+
 def extract_text(resp) -> str:
+    """Pull model text the way n8n extractText does, preferring the message block.
+
+    Search-result and reasoning blocks can contain braces. Those must not be
+    glued onto the answer or the findings object fails to parse.
+    """
     if not resp:
         return ""
     if isinstance(resp, str):
@@ -71,30 +107,30 @@ def extract_text(resp) -> str:
         return resp["output_text"]
     output = resp.get("output")
     if isinstance(output, list):
-        parts: list[str] = []
+        message_parts: list[str] = []
+        other_parts: list[str] = []
         for block in output:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict) and block.get("content"):
-                content = block["content"]
-                if isinstance(content, str):
-                    parts.append(content)
-                elif isinstance(content, list):
-                    for item in content:
-                        if isinstance(item, str):
-                            parts.append(item)
-                        elif isinstance(item, dict) and item.get("text"):
-                            parts.append(item["text"])
-            elif isinstance(block, dict) and block.get("text"):
-                parts.append(block["text"])
-        if parts:
-            return "\n".join(parts)
+            text = _block_text(block)
+            if not text:
+                continue
+            if isinstance(block, dict) and block.get("type") == "message":
+                message_parts.append(text)
+            else:
+                other_parts.append(text)
+        if message_parts:
+            return "\n".join(message_parts)
+        if other_parts:
+            return "\n".join(other_parts)
     choices = resp.get("choices")
     if isinstance(choices, list) and choices:
         message = (choices[0] or {}).get("message") or {}
         content = message.get("content")
         if isinstance(content, str):
             return content
+        if isinstance(content, list) and content:
+            piece = _piece_text(content[0])
+            if piece:
+                return piece
     if isinstance(resp.get("message"), str):
         return resp["message"]
     try:
@@ -103,18 +139,80 @@ def extract_text(resp) -> str:
         return ""
 
 
+def _as_useful_object(parsed):
+    if isinstance(parsed, dict):
+        return parsed
+    if (
+        isinstance(parsed, list)
+        and parsed
+        and all(isinstance(item, dict) for item in parsed)
+        and any(item.get("attributeId") for item in parsed)
+    ):
+        return {"findings": parsed}
+    return None
+
+
+def _objects_in(text: str) -> list:
+    found = []
+    decoder = json.JSONDecoder()
+    index = 0
+    length = len(text)
+    while index < length:
+        start = text.find("{", index)
+        array_start = text.find("[", index)
+        if start < 0 and array_start < 0:
+            break
+        if array_start >= 0 and (start < 0 or array_start < start):
+            start = array_start
+        try:
+            parsed, end = decoder.raw_decode(text, start)
+        except json.JSONDecodeError:
+            index = start + 1
+            continue
+        useful = _as_useful_object(parsed)
+        if useful is not None:
+            found.append(useful)
+        index = max(end, start + 1)
+    return found
+
+
 def parse_json_object(text: str):
-    cleaned = strip_fences(text)
+    """Parse model JSON. Tolerates fences, prose, and citation braces.
+
+    n8n takes the first '{' through the last '}'. A citation or note after the
+    object adds another '}' and that slice no longer parses. Scan each JSON
+    value instead, and prefer a findings or strategy object when several exist.
+    """
+    raw = str(text or "")
+    chunks = [strip_fences(raw), raw]
+    for match in re.finditer(r"```(?:json)?\s*([\s\S]*?)```", raw, re.I):
+        chunks.append(match.group(1).strip())
+    objects = []
+    for chunk in chunks:
+        objects.extend(_objects_in(chunk))
+    for obj in objects:
+        if isinstance(obj.get("findings"), list):
+            return obj
+    for obj in objects:
+        if isinstance(obj.get("summary"), str):
+            return obj
+    cleaned = strip_fences(raw)
     try:
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
     except json.JSONDecodeError:
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                return json.loads(cleaned[start : end + 1])
-            except json.JSONDecodeError:
-                return None
+        parsed = None
+    useful = _as_useful_object(parsed)
+    if useful is not None and not objects:
+        return useful
+    if objects:
+        return objects[0]
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError:
+            return None
     return None
 
 
