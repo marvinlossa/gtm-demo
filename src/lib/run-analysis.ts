@@ -70,6 +70,17 @@ export function startAnalysis(input: AnalysisStart): Promise<void> {
       return;
     }
     if (event.type !== "callback" || !event.body) return;
+    if (event.body.httpStatus !== undefined || event.body.httpError) {
+      console.info(
+        JSON.stringify({
+          event: "provider_http",
+          jobId: input.jobId,
+          error: event.body.error ?? null,
+          httpStatus: event.body.httpStatus ?? null,
+          httpError: event.body.httpError ?? null,
+        }),
+      );
+    }
     const status = event.body.status;
     if (status === "complete" || status === "failed") {
       finish(event.body);

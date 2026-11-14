@@ -302,13 +302,13 @@ def post_json(url: str, payload: dict, headers: dict, timeout: int):
             raw = response.read().decode("utf-8", "replace")
             status = response.status
     except urllib.error.HTTPError as error:
-        return error.code, None
-    except Exception:
-        return 0, None
+        return error.code, None, "HTTPError"
+    except Exception as error:
+        return 0, None, type(error).__name__
     try:
-        return status, json.loads(raw)
+        return status, json.loads(raw), None
     except json.JSONDecodeError:
-        return status, {"output_text": raw}
+        return status, {"output_text": raw}, None
 
 
 def validate_payload(body: dict) -> dict | None:
@@ -361,7 +361,7 @@ def run(payload: dict):
     )
 
     perplexity_key = os.environ.get("PERPLEXITY_API_KEY") or ""
-    status, research_body = post_json(
+    research_result = post_json(
         PERPLEXITY_URL,
         {
             "model": ctx["perplexityModel"],
@@ -374,12 +374,15 @@ def run(payload: dict):
         },
         PERPLEXITY_TIMEOUT_S,
     )
+    status, research_body = research_result[0], research_result[1]
     if status >= 400 or status == 0 or research_body is None:
         yield callback(
             {
                 "status": "failed",
                 "executionId": execution_id,
                 "error": "RESEARCH_HTTP_ERROR",
+                "httpStatus": status,
+                "httpError": research_result[2] if len(research_result) > 2 else None,
             }
         )
         return
@@ -403,7 +406,7 @@ def run(payload: dict):
     system, user = build_strategy_prompts(ctx)
     referer = os.environ.get("APP_PUBLIC_URL") or "https://gtm-demo.marvinlossa.com"
     openrouter_key = os.environ.get("OPENROUTER_API_KEY") or ""
-    status, strategy_body = post_json(
+    strategy_result = post_json(
         OPENROUTER_URL,
         {
             "model": ctx["openRouterModel"],
@@ -428,12 +431,15 @@ def run(payload: dict):
         },
         OPENROUTER_TIMEOUT_S,
     )
+    status, strategy_body = strategy_result[0], strategy_result[1]
     if status >= 400 or status == 0 or strategy_body is None:
         yield callback(
             {
                 "status": "failed",
                 "executionId": execution_id,
                 "error": "STRATEGY_HTTP_ERROR",
+                "httpStatus": status,
+                "httpError": strategy_result[2] if len(strategy_result) > 2 else None,
             }
         )
         return
